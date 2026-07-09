@@ -1,0 +1,59 @@
+﻿DUPLICATE: D:\FlutterSDK\flutter\bin
+MISSING: D:\anaconda\bin
+REDUNDANT(machine): C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.1\bin
+REDUNDANT(machine): C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.1\libnvvp
+REDUNDANT(machine): C:\Users\10748\AppData\Local\Programs\Python\Python313\Scripts
+REDUNDANT(machine): C:\Users\10748\AppData\Local\Programs\Python\Python313
+REDUNDANT(machine): D:\runtime\win64
+INVALID(corrupt): :\Windows\system32
+REDUNDANT(machine): C:\Windows
+REDUNDANT(machine): C:\Windows\System32\Wbem
+REDUNDANT(machine): C:\Windows\System32\WindowsPowerShell\v1.0
+REDUNDANT(machine): C:\Windows\System32\OpenSSH
+REDUNDANT(machine): C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common
+REDUNDANT(machine): C:\Program Files\Microsoft SQL Server\150\Tools\Binn
+REDUNDANT(machine): D:\bin
+REDUNDANT(machine): D:\polyspace\bin
+REDUNDANT(machine): C:\Program Files\NVIDIA Corporation\NVIDIA app\NvDLISR
+REDUNDANT(machine): C:\WINDOWS\system32
+REDUNDANT(machine): C:\WINDOWS
+REDUNDANT(machine): C:\WINDOWS\System32\Wbem
+REDUNDANT(machine): C:\WINDOWS\System32\WindowsPowerShell\v1.0
+REDUNDANT(machine): C:\WINDOWS\System32\OpenSSH
+REDUNDANT(machine): D:\Git\cmd
+REDUNDANT(machine): E:\mysql\mysql\bin
+REDUNDANT(machine): D:\Mongodbsh
+REDUNDANT(machine): C:\Program Files\Microsoft SQL Server\Client SDK\ODBC\170\Tools\Binn
+REDUNDANT(machine): C:\Program Files\dotnet
+REDUNDANT(machine): C:\Program Files (x86)\Windows Kits\10\Windows Performance Toolkit
+REDUNDANT(machine): C:\ProgramData\chocolatey\bin
+REDUNDANT(machine): D:\node
+REDUNDANT(machine): D:\Golang\bin
+REDUNDANT(machine): C:\Program Files\NVIDIA Corporation\Nsight Compute 2020.2.0
+REDUNDANT(machine): C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.1
+REDUNDANT(machine): C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.1\bin
+REDUNDANT(machine): C:\Program Files\NVIDIA GPU Computing Toolkit\TensorRT-8.4.0.6.Windows10.x86_64.cuda-11.6.cudnn8.3\TensorRT-8.4.0.6\bin
+REDUNDANT(machine): C:\Program Files\NVIDIA GPU Computing Toolkit\TensorRT-8.4.0.6.Windows10.x86_64.cuda-11.6.cudnn8.3\TensorRT-8.4.0.6\lib
+REDUNDANT(machine): D:\Redis
+REDUNDANT(machine): C:\Program Files\MySQL\MySQL Server 9.2\bin
+REDUNDANT(machine): D:\cursor\resources\app\bin
+INVALID(exe): D:\node\node.exe
+REDUNDANT(machine): D:\MinGW\bin
+REDUNDANT(machine): C:\Program Files\Pandoc
+REDUNDANT(machine): C:\Program Files\Java\jdk-17\bin
+INVALID: .
+REDUNDANT(machine): C:\Program Files\Docker\Docker\resources\bin
+DUPLICATE: D:\anaconda
+DUPLICATE: D:\anaconda\Library\mingw-w64\bin
+DUPLICATE: D:\anaconda\Library\usr\bin
+DUPLICATE: D:\anaconda\Library\bin
+DUPLICATE: D:\anaconda\Scripts
+INVALID: .
+REDUNDANT(machine): D:\cursor\resources\app\bin
+REDUNDANT(machine): D:\Mongodbsh
+MISSING: C:\Users\10748\.dotnet\tools
+MISSING: D:\Qt\6.9.0\mingw_64\bin
+REDUNDANT(machine): C:\ProgramData\chocolatey\bin
+INVALID: .
+INVALID: .
+REDUNDANT(machine): D:\AWS

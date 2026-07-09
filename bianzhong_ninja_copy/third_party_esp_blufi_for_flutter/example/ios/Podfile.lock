@@ -1,0 +1,22 @@
+PODS:
+  - esp_blufi_for_flutter (0.0.1):
+    - Flutter
+  - Flutter (1.0.0)
+
+DEPENDENCIES:
+  - esp_blufi_for_flutter (from `.symlinks/plugins/esp_blufi_for_flutter/ios`)
+  - Flutter (from `Flutter`)
+
+EXTERNAL SOURCES:
+  esp_blufi_for_flutter:
+    :path: ".symlinks/plugins/esp_blufi_for_flutter/ios"
+  Flutter:
+    :path: Flutter
+
+SPEC CHECKSUMS:
+  esp_blufi_for_flutter: 7f501cb945145bf412417f9fcf8a939fb506b7d1
+  Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
+
+PODFILE CHECKSUM: d85ddc5f90e8c593f9dc16ef40fc88253b4f8f6b
+
+COCOAPODS: 1.16.2
