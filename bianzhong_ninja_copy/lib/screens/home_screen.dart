@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-import '../models/sensor_data.dart';
-import '../models/song_library.dart';
+import '../models/app_demo_mode.dart';
 import '../models/song_model.dart';
 import '../providers/app_provider.dart';
+import '../utils/constants.dart';
+import '../widgets/connection_status_widget.dart';
 import '../widgets/stage_bianzhong_view.dart';
+import 'follow_along_screen.dart';
 import 'settings_screen.dart';
 
 /// 主界面
@@ -28,6 +30,7 @@ class HomeScreen extends StatelessWidget {
           ),
         ),
         actions: [
+          const _DemoModeActions(),
           IconButton(
             tooltip: '设置',
             icon: const Icon(Icons.settings),
@@ -47,7 +50,20 @@ class HomeScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: const _PerformancePage(),
+      body: Column(
+        children: [
+          const ConnectionStatusWidget(),
+          Expanded(
+            child: Stack(
+              children: const [
+                _PerformancePage(),
+                _FollowAlongCountdownOverlay(),
+                _VisionEdgeWarningOverlay(),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -66,38 +82,29 @@ class _PerformancePage extends StatelessWidget {
             final horizontalPadding = constraints.maxWidth < 960 ? 12.0 : 24.0;
             final verticalPadding = constraints.maxHeight < 760 ? 10.0 : 18.0;
 
-            return Stack(
-              children: [
-                Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    horizontalPadding,
-                    verticalPadding,
-                    horizontalPadding,
-                    verticalPadding + 8,
-                  ),
-                  child: RepaintBoundary(
-                    child: StageBianzhongView(
-                      currentOctave: provider.currentOctave,
-                      lastStrikeBellId: provider.lastStrikeBellId,
-                      activeBellIds: provider.activeBellIds,
-                      activeHammers: provider.activeHammers,
-                      hammerSensorStates: provider.activeHammerSensorStates,
-                      ninjaMode: provider.ninjaMode,
-                      bladeTrails: provider.bladeTrails,
-                      followAlongCurrentBellId: provider.followAlongCurrentBellId,
-                      followAlongNotePulse: provider.followProgress.notePulse,
-                      onBellTapped: provider.onBellTapped,
-                    ),
-                  ),
+            return Padding(
+              padding: EdgeInsets.fromLTRB(
+                horizontalPadding,
+                verticalPadding,
+                horizontalPadding,
+                verticalPadding + 8,
+              ),
+              child: RepaintBoundary(
+                child: StageBianzhongView(
+                  currentOctave: provider.currentOctave,
+                  lastStrikeBellId: provider.lastStrikeBellId,
+                  activeBellIds: provider.activeBellIds,
+                  activeHammers: provider.activeHammers,
+                  hammerSensorStates: provider.activeHammerSensorStates,
+                  stickFrames: provider.stickFrames,
+                  ninjaMode: provider.ninjaMode,
+                  bladeTrails: provider.bladeTrails,
+                  followAlongCurrentBellId: provider.followAlongCurrentBellId,
+                  followAlongNotePulse: provider.followProgress.notePulse,
+                  debugShowHitBoxes: provider.debugShowHitBoxes,
+                  onBellTapped: provider.onBellTapped,
                 ),
-                if (provider.isFollowAlongActive || provider.followProgress.state == FollowAlongState.finished)
-                  Positioned(
-                    top: verticalPadding + 8,
-                    left: horizontalPadding + 8,
-                    right: horizontalPadding + 8,
-                    child: _FollowAlongOverlay(provider: provider),
-                  ),
-              ],
+              ),
             );
           },
         );
@@ -106,43 +113,105 @@ class _PerformancePage extends StatelessWidget {
   }
 }
 
-class _FollowAlongOverlay extends StatelessWidget {
-  final AppProvider provider;
-  const _FollowAlongOverlay({required this.provider});
+class _FollowAlongCountdownOverlay extends StatelessWidget {
+  const _FollowAlongCountdownOverlay();
 
   @override
   Widget build(BuildContext context) {
-    final progress = provider.followProgress;
-
-    if (progress.state == FollowAlongState.countdown) {
-      return Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.7),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              '${provider.countdownRemaining}',
-              style: const TextStyle(
-                fontSize: 48,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(width: 12),
-            const Text(
-              '秒后开始',
-              style: TextStyle(fontSize: 20, color: Colors.white70),
-            ),
-          ],
-        ),
-      );
+    final provider = context.watch<AppProvider>();
+    if (provider.followProgress.state != FollowAlongState.countdown) {
+      return const SizedBox.shrink();
     }
 
-    return const SizedBox.shrink();
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: Container(
+          color: Colors.black.withValues(alpha: 0.35),
+          alignment: Alignment.topCenter,
+          padding: const EdgeInsets.only(top: 72),
+          child: Text(
+            '${provider.countdownRemaining}',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 96,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _VisionEdgeWarningOverlay extends StatelessWidget {
+  const _VisionEdgeWarningOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<AppProvider>();
+    if (provider.inputMode != InputMode.vision) {
+      return const SizedBox.shrink();
+    }
+
+    final outOfBounds = provider.stickFrames.any((frame) {
+      if (!frame.isVisible) return false;
+      final inset = AppConstants.demoInteractionZoneInset;
+      return frame.x < inset ||
+          frame.x > 1 - inset ||
+          frame.y < inset ||
+          frame.y > 1 - inset;
+    });
+
+    if (!outOfBounds) {
+      return const SizedBox.shrink();
+    }
+
+    return Positioned(
+      left: 16,
+      right: 16,
+      bottom: 16,
+      child: Material(
+        color: Colors.orange.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(8),
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Text(
+            '敲击棒接近画面边缘，请回到中央操作区域',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DemoModeActions extends StatelessWidget {
+  const _DemoModeActions();
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<AppProvider>();
+    if (!provider.demoModeEnabled ||
+        provider.demoMode != DemoMode.performing) {
+      return const SizedBox.shrink();
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          tooltip: '返回待机',
+          icon: const Icon(Icons.slideshow),
+          onPressed: provider.enterStandbyMode,
+        ),
+        IconButton(
+          tooltip: '重置演示',
+          icon: const Icon(Icons.restart_alt),
+          onPressed: provider.resetDemoMode,
+        ),
+      ],
+    );
   }
 }
 
@@ -187,51 +256,25 @@ class _FollowAlongButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isActive = provider.isFollowAlongActive;
-    final isFinished = provider.followProgress.state == FollowAlongState.finished;
     return _ModeChip(
-      label: isActive ? '跟奏中' : (isFinished ? '已完成' : '智能跟奏'),
+      label: isActive ? '跟奏中' : '智能跟奏',
       icon: Icons.music_note,
-      isActive: isActive || isFinished,
+      isActive: isActive,
       activeColor: Colors.amber,
       onTap: () {
-        if (isActive || isFinished) {
+        if (isActive) {
           provider.stopFollowAlong();
         } else {
-          _showSongSelectionDialog(context, provider);
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const FollowAlongScreen(),
+            ),
+          );
         }
       },
     );
   }
-}
-
-void _showSongSelectionDialog(BuildContext context, AppProvider provider) {
-  final songs = SongLibrary.songs;
-  showDialog(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('选择歌曲'),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: ListView.builder(
-          shrinkWrap: true,
-          itemCount: songs.length,
-          itemBuilder: (context, index) {
-            final song = songs[index];
-            return ListTile(
-              leading: CircleAvatar(child: Text('${index + 1}')),
-              title: Text(song.title),
-              subtitle: Text('${song.artist} · ${song.notes.length}个音符'),
-              trailing: const Icon(Icons.play_circle_fill),
-              onTap: () {
-                Navigator.of(ctx).pop();
-                provider.startFollowAlong(song.id);
-              },
-            );
-          },
-        ),
-      ),
-    ),
-  );
 }
 
 class _ModeChip extends StatelessWidget {

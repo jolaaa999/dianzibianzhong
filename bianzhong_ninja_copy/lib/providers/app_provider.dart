@@ -3,13 +3,17 @@ import 'dart:math' as math;
 import 'dart:ui' show Offset;
 
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/app_demo_mode.dart';
 import '../models/sensor_data.dart';
 import '../models/song_model.dart';
 import '../models/song_library.dart';
+import '../models/vision_stick_frame.dart';
 import '../services/audio_service.dart';
 import '../services/ble_provisioning_service.dart';
 import '../services/udp_hammer_service.dart';
+import '../services/vision_tracking_service.dart';
 import '../services/wifi_info_service.dart';
 import '../services/websocket_service.dart';
 import '../utils/constants.dart';
@@ -17,11 +21,14 @@ import '../utils/hammer_pose_mapper.dart';
 import '../utils/stage_hit_mapper.dart';
 import '../utils/blade_trail.dart';
 import '../utils/slash_detector.dart';
+import '../utils/vision_strike_detector.dart';
 
 /// 应用状态管理
 class AppProvider with ChangeNotifier {
   final WebSocketService _wsService = WebSocketService();
   final UdpHammerService _udpService = UdpHammerService();
+  final VisionTrackingService _visionService = VisionTrackingService();
+  final VisionStrikeDetector _visionStrikeDetector = VisionStrikeDetector();
   final AudioService _audioService = AudioService();
   BleProvisioningService? _bleProvisioningService;
   final WifiInfoService _wifiInfoService = WifiInfoService();
@@ -31,9 +38,13 @@ class AppProvider with ChangeNotifier {
 
   ConnectionStatus _connectionStatus = ConnectionStatus.disconnected;
   ConnectionStatus _wsStatus = ConnectionStatus.disconnected;
+  ConnectionStatus _visionStatus = ConnectionStatus.disconnected;
+  InputMode _inputMode = InputMode.vision;
   String _wsUrl = AppConstants.defaultWsUrl;
+  String _visionWsUrl = AppConstants.defaultVisionWsUrl;
   String _errorMessage = '';
   bool _udpListening = false;
+  final Map<int, VisionStickFrame> _stickFramesById = {};
   List<ActiveHammerInfo> _activeHammers = [];
   final Map<String, SensorData> _hammerSensorDataByDeviceId = {};
   final Map<String, DateTime> _lastAcceptedStrikeAtByDeviceId = {};
@@ -61,6 +72,7 @@ class AppProvider with ChangeNotifier {
   double _volume = AppConstants.defaultVolume;
   double _sensitivity = AppConstants.defaultSensitivity;
   bool _audioEnabled = true;
+  bool _reverbEnabled = true;
   bool _isDisposed = false;
   DateTime? _lastStageRefreshAt;
   Timer? _stageRefreshTimer;
@@ -76,6 +88,14 @@ class AppProvider with ChangeNotifier {
   final Set<int> _followHitNoteIndices = {};
   int _countdownRemaining = 0;
 
+  DemoMode _demoMode = DemoMode.standby;
+  bool _demoModeEnabled = true;
+  DateTime? _lastStrikeAt;
+  Timer? _demoModeTimer;
+  bool _debugShowHitBoxes = false;
+  bool _calibrationCompleted = false;
+  late final Future<void> _settingsLoadedFuture;
+
   ConnectionStatus get connectionStatus => _connectionStatus;
   String get wsUrl => _wsUrl;
   String get errorMessage => _errorMessage;
@@ -87,6 +107,7 @@ class AppProvider with ChangeNotifier {
   double get volume => _volume;
   double get sensitivity => _sensitivity;
   bool get audioEnabled => _audioEnabled;
+  bool get reverbEnabled => _reverbEnabled;
   bool get isConnected => _connectionStatus.isConnected;
   bool get isMonitoringHardware => _udpListening;
   bool get isBleScanning => _isBleScanning;
@@ -145,6 +166,22 @@ class AppProvider with ChangeNotifier {
       _followProgress.state == FollowAlongState.playing ||
       _followProgress.state == FollowAlongState.countdown;
   int get countdownRemaining => _countdownRemaining;
+
+  InputMode get inputMode => _inputMode;
+  String get visionWsUrl => _visionWsUrl;
+  ConnectionStatus get visionStatus => _visionStatus;
+  bool get visionSignalLost => _visionService.isSignalLost;
+  List<VisionStickFrame> get stickFrames =>
+      _stickFramesById.values.toList(growable: false);
+  Map<int, VisionStickFrame> get stickFramesById =>
+      Map.unmodifiable(_stickFramesById);
+  DemoMode get demoMode => _demoMode;
+  bool get demoModeEnabled => _demoModeEnabled;
+  bool get debugShowHitBoxes => _debugShowHitBoxes;
+  bool get calibrationCompleted => _calibrationCompleted;
+  Future<void> get settingsLoaded => _settingsLoadedFuture;
+  Future<void> waitForSettingsLoaded() => _settingsLoadedFuture;
+  VisionStrikeDetector get visionStrikeDetector => _visionStrikeDetector;
   int? get followAlongCurrentBellId {
     if (_currentSong == null || _followProgress.currentNoteIndex < 0 ||
         _followProgress.currentNoteIndex >= _currentSong!.notes.length) {
@@ -319,7 +356,204 @@ class AppProvider with ChangeNotifier {
   AppProvider() {
     _initializeBellStates();
     _setupListeners();
-    startHardwareDiscovery();
+    _settingsLoadedFuture = _loadPersistedSettings().then((_) => _applyInputModeStartup());
+    _startDemoModeTimer();
+  }
+
+  Future<void> _applyInputModeStartup() async {
+    if (_inputMode == InputMode.imu) {
+      await startHardwareDiscovery();
+    } else if (_inputMode == InputMode.vision) {
+      await connectVisionTracking(_visionWsUrl);
+    }
+    _notifySafely();
+  }
+
+  Future<void> _loadPersistedSettings() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _calibrationCompleted = prefs.getBool('calibration_completed') ?? false;
+      _debugShowHitBoxes = prefs.getBool('debug_show_hit_boxes') ?? false;
+      _demoModeEnabled = prefs.getBool('demo_mode_enabled') ?? true;
+      final savedInputMode = prefs.getString('input_mode');
+      if (savedInputMode != null) {
+        _inputMode = InputMode.values.firstWhere(
+          (m) => m.name == savedInputMode,
+          orElse: () => InputMode.vision,
+        );
+      }
+      _visionWsUrl =
+          prefs.getString('vision_ws_url') ?? AppConstants.defaultVisionWsUrl;
+      _reverbEnabled = prefs.getBool('audio_reverb_enabled') ?? true;
+      _audioService.setReverbEnabled(_reverbEnabled);
+      _visionStrikeDetector.minStrikeSpeed =
+          prefs.getDouble('vision_min_strike_speed') ??
+          AppConstants.visionMinStrikeSpeed;
+      _visionStrikeDetector.hoverSpeedThreshold =
+          prefs.getDouble('vision_hover_speed_threshold') ??
+          AppConstants.visionHoverSpeedThreshold;
+    } catch (_) {}
+  }
+
+  Future<void> markCalibrationCompleted() async {
+    _calibrationCompleted = true;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('calibration_completed', true);
+    _notifySafely();
+  }
+
+  Future<void> resetCalibration() async {
+    _calibrationCompleted = false;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('calibration_completed', false);
+    _notifySafely();
+  }
+
+  Future<void> setDebugShowHitBoxes(bool value) async {
+    _debugShowHitBoxes = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('debug_show_hit_boxes', value);
+    _requestStageRefresh(immediate: true);
+    _notifySafely();
+  }
+
+  Future<void> setReverbEnabled(bool value) async {
+    _reverbEnabled = value;
+    _audioService.setReverbEnabled(value);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('audio_reverb_enabled', value);
+    _notifySafely();
+  }
+
+  Future<void> setVisionMinStrikeSpeed(double value) async {
+    _visionStrikeDetector.minStrikeSpeed = value.clamp(0.2, 3.0);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(
+      'vision_min_strike_speed',
+      _visionStrikeDetector.minStrikeSpeed,
+    );
+    _notifySafely();
+  }
+
+  Future<void> setVisionHoverSpeedThreshold(double value) async {
+    _visionStrikeDetector.hoverSpeedThreshold = value.clamp(0.05, 1.0);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(
+      'vision_hover_speed_threshold',
+      _visionStrikeDetector.hoverSpeedThreshold,
+    );
+    _notifySafely();
+  }
+
+  Future<void> setDemoModeEnabled(bool value) async {
+    _demoModeEnabled = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('demo_mode_enabled', value);
+    if (!value && _demoMode == DemoMode.standby) {
+      enterPerformingMode();
+    }
+    _notifySafely();
+  }
+
+  void enterPerformingMode() {
+    if (_demoMode == DemoMode.performing) return;
+    _demoMode = DemoMode.performing;
+    _lastStrikeAt = DateTime.now();
+    _notifySafely();
+  }
+
+  void enterStandbyMode() {
+    if (_demoMode == DemoMode.standby) return;
+    _demoMode = DemoMode.standby;
+    _stopFollowAlong();
+    _audioService.stopAll();
+    _clearBellHighlights();
+    _requestStageRefresh(immediate: true);
+    _notifySafely();
+  }
+
+  Future<void> resetDemoMode() async {
+    await _audioService.stopAll();
+    _clearBellHighlights();
+    _lastStrikeAt = null;
+    enterStandbyMode();
+  }
+
+  void _startDemoModeTimer() {
+    _demoModeTimer?.cancel();
+    _demoModeTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!_demoModeEnabled || _demoMode != DemoMode.performing) return;
+      if (_lastStrikeAt == null) return;
+      if (DateTime.now().difference(_lastStrikeAt!) >
+          AppConstants.demoIdleTimeout) {
+        enterStandbyMode();
+      }
+    });
+  }
+
+  void _onAnyStrike() {
+    _lastStrikeAt = DateTime.now();
+    if (_demoModeEnabled && _demoMode == DemoMode.standby) {
+      enterPerformingMode();
+    }
+  }
+
+  void _checkStickInteractionZone(VisionStickFrame frame) {
+    if (!_demoModeEnabled || _demoMode != DemoMode.standby) return;
+    if (!frame.isVisible) return;
+    final inset = AppConstants.demoInteractionZoneInset;
+    if (frame.x >= inset &&
+        frame.x <= 1 - inset &&
+        frame.y >= inset &&
+        frame.y <= 1 - inset) {
+      enterPerformingMode();
+    }
+  }
+
+  Future<void> setInputMode(InputMode mode) async {
+    if (_inputMode == mode) return;
+    _inputMode = mode;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('input_mode', mode.name);
+
+    if (mode != InputMode.imu) {
+      _udpService.stop();
+      _udpListening = false;
+    }
+    if (mode != InputMode.vision) {
+      await _visionService.disconnect();
+      _stickFramesById.clear();
+      _visionStrikeDetector.reset();
+    }
+
+    if (mode == InputMode.imu) {
+      await startHardwareDiscovery();
+    } else if (mode == InputMode.vision) {
+      await connectVisionTracking(_visionWsUrl);
+    }
+
+    _refreshConnectionState();
+    _notifySafely();
+  }
+
+  Future<void> connectVisionTracking(String url) async {
+    _visionWsUrl = url;
+    _inputMode = InputMode.vision;
+    _errorMessage = '';
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('vision_ws_url', url);
+    await prefs.setString('input_mode', InputMode.vision.name);
+    await _visionService.connect(url);
+    _refreshConnectionState();
+    _notifySafely();
+  }
+
+  Future<void> disconnectVisionTracking() async {
+    await _visionService.disconnect();
+    _stickFramesById.clear();
+    _visionStrikeDetector.reset();
+    _refreshConnectionState();
+    _notifySafely();
   }
 
   void _initializeBellStates() {
@@ -369,6 +603,61 @@ class AppProvider with ChangeNotifier {
         _notifySafely();
       }),
     );
+
+    _subscriptions.add(
+      _visionService.statusStream.listen((status) {
+        _visionStatus = status;
+        if (status == ConnectionStatus.error) {
+          _errorMessage = '视觉追踪连接失败';
+        } else if (status == ConnectionStatus.connected) {
+          if (_errorMessage == '视觉追踪连接失败' ||
+              _errorMessage == '追踪信号丢失') {
+            _errorMessage = '';
+          }
+        }
+        _refreshConnectionState();
+        _notifySafely();
+      }),
+    );
+
+    _subscriptions.add(
+      _visionService.frameStream.listen(_handleVisionFrame),
+    );
+  }
+
+  void _handleVisionFrame(VisionStickFrame frame) {
+    if (_inputMode != InputMode.vision) return;
+
+    _messageCount++;
+    _stickFramesById[frame.stickId] = frame;
+
+    if (!frame.isVisible) {
+      _requestStageRefresh(immediate: true);
+      return;
+    }
+
+    _checkStickInteractionZone(frame);
+
+    final hits = _visionStrikeDetector.update(
+      stickId: frame.stickId,
+      point: Offset(frame.x, frame.y),
+      timestamp: frame.timestamp,
+      currentOctave: _currentOctave,
+    );
+
+    for (final hit in hits) {
+      _handleStrike(
+        hit.intensity,
+        bellId: hit.bellId,
+        region: hit.region,
+      );
+      _visionService.sendStrikeAck(
+        bellId: hit.bellId,
+        stickId: hit.stickId,
+      );
+    }
+
+    _requestStageRefresh(immediate: hits.isNotEmpty);
   }
 
   /// 启动 UDP 硬件监听
@@ -568,6 +857,9 @@ class AppProvider with ChangeNotifier {
   }
 
   void _handleUdpMessage(UdpHammerMessage message) {
+    if (_inputMode == InputMode.vision || _inputMode == InputMode.touchOnly) {
+      return;
+    }
     _messageCount++;
     final incomingOctave = message.octave?.clamp(
       AppConstants.minOctave,
@@ -741,6 +1033,7 @@ class AppProvider with ChangeNotifier {
     int? bellId,
     StageStrikeRegion region = StageStrikeRegion.center,
   }) {
+    _onAnyStrike();
     final baseBellId = bellId ?? _resolveBellIdForLatestSensor();
     final resolvedBellId = _resolveBellIdForRegion(baseBellId, region);
     _lastStrikeBellId = baseBellId;
@@ -930,6 +1223,7 @@ class AppProvider with ChangeNotifier {
     double intensity, {
     StageStrikeRegion region = StageStrikeRegion.center,
   }) {
+    _onAnyStrike();
     _checkFollowAlongHit(bellId);
     final resolvedBellId = _resolveBellIdForRegion(bellId, region);
     if (_audioEnabled) {
@@ -1002,6 +1296,32 @@ class AppProvider with ChangeNotifier {
   }
 
   void _refreshConnectionState() {
+    if (_inputMode == InputMode.vision) {
+      if (_visionStatus == ConnectionStatus.connected && !_visionService.isSignalLost) {
+        _connectionStatus = ConnectionStatus.connected;
+        return;
+      }
+      if (_visionStatus == ConnectionStatus.reconnecting ||
+          (_visionStatus == ConnectionStatus.connected &&
+              _visionService.isSignalLost)) {
+        _connectionStatus = ConnectionStatus.reconnecting;
+        if (_visionService.isSignalLost) {
+          _errorMessage = '追踪信号丢失';
+        }
+        return;
+      }
+      if (_visionStatus == ConnectionStatus.connecting) {
+        _connectionStatus = ConnectionStatus.connecting;
+        return;
+      }
+      if (_visionStatus == ConnectionStatus.error) {
+        _connectionStatus = ConnectionStatus.error;
+        return;
+      }
+      _connectionStatus = ConnectionStatus.disconnected;
+      return;
+    }
+
     if (_activeHammers.isNotEmpty || _wsStatus == ConnectionStatus.connected) {
       _connectionStatus = ConnectionStatus.connected;
       return;
@@ -1031,6 +1351,27 @@ class AppProvider with ChangeNotifier {
   }
 
   String _buildConnectionSummary() {
+    if (_inputMode == InputMode.vision) {
+      if (_visionStatus == ConnectionStatus.connected) {
+        if (_visionService.isSignalLost) {
+          return '视觉追踪 · 追踪信号丢失';
+        }
+        final sticks = _stickFramesById.values
+            .where((f) => f.isVisible)
+            .map((f) => '棒${f.stickId}')
+            .join('、');
+        return '视觉追踪 · $_visionWsUrl${sticks.isNotEmpty ? ' · $sticks' : ''}';
+      }
+      if (_visionStatus == ConnectionStatus.reconnecting) {
+        return '视觉追踪 · 重新连接中...';
+      }
+      return '视觉追踪 · 未连接';
+    }
+
+    if (_inputMode == InputMode.touchOnly) {
+      return '仅触控模式';
+    }
+
     if (_activeHammers.isNotEmpty) {
       return 'UDP ${AppConstants.defaultUdpPort} · 活跃击锤: ${_buildActiveHammerSummary()}';
     }
@@ -1090,8 +1431,11 @@ class AppProvider with ChangeNotifier {
     _stageRefreshTimer = null;
     _followTimer?.cancel();
     _followTimer = null;
+    _demoModeTimer?.cancel();
+    _demoModeTimer = null;
     _udpService.dispose();
     _wsService.dispose();
+    _visionService.dispose();
     _audioService.dispose();
     _stageRevision.dispose();
     super.dispose();

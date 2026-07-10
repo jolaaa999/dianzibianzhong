@@ -7,6 +7,24 @@ class AppConstants {
 
   // WebSocket 兼容模式
   static const String defaultWsUrl = 'ws://192.168.4.1:81';
+
+  // 视觉追踪（PRD 方案一）
+  static const String defaultVisionWsUrl = 'ws://127.0.0.1:8765';
+  static const Duration visionFrameTimeout = Duration(milliseconds: 200);
+  static const Duration visionStickStaleTimeout = Duration(milliseconds: 250);
+  static const Duration visionReconnectDelay = Duration(seconds: 3);
+  static const Duration audioReverbDelay = Duration(milliseconds: 68);
+  static const double audioReverbWetMix = 0.28;
+  static const int audioReverbMinVoices = 3;
+  static const Duration visionStrikeCooldown = Duration(milliseconds: 80);
+  static const Duration visionSimultaneousWindow = Duration(milliseconds: 50);
+  static const double visionMinStrikeSpeed = 0.8;
+  static const double visionHoverSpeedThreshold = 0.15;
+  static const double visionMaxStrikeSpeed = 4.0;
+
+  // 演示模式
+  static const Duration demoIdleTimeout = Duration(seconds: 60);
+  static const double demoInteractionZoneInset = 0.15;
   static const String defaultSsid = 'Bianzong_Stage';
   static const String defaultPassword = '12345678';
   static const String bleProvisionPrefix = 'BianzongHammer-';
@@ -46,7 +64,7 @@ class AppConstants {
   static const double bellSpacing = 8.0;
   static const double minUiStrikeIntensity = 0.12;
   static const Duration uiStrikeDebounce = Duration(milliseconds: 180);
-  static const Duration bellHighlightDuration = Duration(milliseconds: 300);
+  static const Duration bellHighlightDuration = Duration(milliseconds: 200);
   static const Duration stageRefreshInterval = Duration(milliseconds: 33);
   static const Duration sideStrikeHoverLockDelay = Duration(seconds: 1);
 

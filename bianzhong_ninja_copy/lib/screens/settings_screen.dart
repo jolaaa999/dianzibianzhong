@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../models/app_demo_mode.dart';
 import '../models/sensor_data.dart';
 import '../providers/app_provider.dart';
+import '../widgets/bell_grid_widget.dart';
+import 'calibration_wizard_screen.dart';
 import 'connection_screen.dart';
 import '../utils/constants.dart';
 
@@ -25,6 +28,13 @@ class SettingsScreen extends StatelessWidget {
                 value: provider.audioEnabled,
                 onChanged: provider.setAudioEnabled,
                 secondary: const Icon(Icons.volume_up),
+              ),
+              SwitchListTile(
+                title: const Text('厅堂混响'),
+                subtitle: const Text('三音及以上时叠加微量延迟混响，模拟展厅声学'),
+                value: provider.reverbEnabled,
+                onChanged: provider.setReverbEnabled,
+                secondary: const Icon(Icons.surround_sound),
               ),
               ListTile(
                 leading: const Icon(Icons.volume_down),
@@ -62,6 +72,20 @@ class SettingsScreen extends StatelessWidget {
 
               // 连接信息
               _buildSectionHeader('配网与连接'),
+              ListTile(
+                leading: const Icon(Icons.input),
+                title: const Text('输入模式'),
+                subtitle: Text(provider.inputMode.displayName),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ConnectionScreen(),
+                    ),
+                  );
+                },
+              ),
               ListTile(
                 leading: const Icon(Icons.router),
                 title: const Text('配网与连接管理'),
@@ -104,6 +128,110 @@ class SettingsScreen extends StatelessWidget {
                 leading: const Icon(Icons.gps_fixed),
                 title: const Text('活跃击锤'),
                 subtitle: Text(provider.activeHammerSummary),
+              ),
+
+              const Divider(),
+
+              // 演示模式
+              _buildSectionHeader('演示模式'),
+              SwitchListTile(
+                title: const Text('展厅演示模式'),
+                subtitle: const Text('待机/attract loop 与 60 秒无操作自动回待机'),
+                value: provider.demoModeEnabled,
+                onChanged: provider.setDemoModeEnabled,
+                secondary: const Icon(Icons.slideshow),
+              ),
+              ListTile(
+                leading: const Icon(Icons.restart_alt),
+                title: const Text('重置演示'),
+                subtitle: Text('当前: ${provider.demoMode.displayName}'),
+                onTap: () => provider.resetDemoMode(),
+              ),
+
+              const Divider(),
+
+              // 开发者选项
+              _buildSectionHeader('开发者选项'),
+              SwitchListTile(
+                title: const Text('显示碰撞盒'),
+                subtitle: const Text('调试模式下叠加显示隐性碰撞区域'),
+                value: provider.debugShowHitBoxes,
+                onChanged: provider.setDebugShowHitBoxes,
+                secondary: const Icon(Icons.grid_on),
+              ),
+              ListTile(
+                leading: const Icon(Icons.speed),
+                title: const Text('视觉敲击最低速度'),
+                subtitle: Slider(
+                  value: provider.visionStrikeDetector.minStrikeSpeed,
+                  min: 0.2,
+                  max: 2.0,
+                  divisions: 18,
+                  label: provider.visionStrikeDetector.minStrikeSpeed
+                      .toStringAsFixed(2),
+                  onChanged: provider.setVisionMinStrikeSpeed,
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.pause_circle_outline),
+                title: const Text('视觉悬停速度上限'),
+                subtitle: Slider(
+                  value: provider.visionStrikeDetector.hoverSpeedThreshold,
+                  min: 0.05,
+                  max: 0.8,
+                  divisions: 15,
+                  label: provider.visionStrikeDetector.hoverSpeedThreshold
+                      .toStringAsFixed(2),
+                  onChanged: provider.setVisionHoverSpeedThreshold,
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.tune),
+                title: const Text('视觉敲击阈值摘要'),
+                subtitle: Text(
+                  '最低速度 ${provider.visionStrikeDetector.minStrikeSpeed.toStringAsFixed(2)} · '
+                  '悬停 ${provider.visionStrikeDetector.hoverSpeedThreshold.toStringAsFixed(2)}',
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.grid_view),
+                title: const Text('编钟网格调试'),
+                subtitle: const Text('BellGridWidget 八度选择器'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => Scaffold(
+                        appBar: AppBar(title: const Text('编钟网格调试')),
+                        body: BellGridWidget(
+                          selectedOctave: provider.currentOctave,
+                          getBellState: provider.getBellState,
+                          onBellTapped: provider.onBellTapped,
+                          onOctaveChanged: provider.setCurrentOctave,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.center_focus_strong),
+                title: const Text('重新校准'),
+                subtitle: Text(
+                  provider.calibrationCompleted ? '已完成校准' : '尚未完成校准',
+                ),
+                onTap: () async {
+                  await provider.resetCalibration();
+                  if (context.mounted) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const CalibrationWizardScreen(),
+                      ),
+                    );
+                  }
+                },
               ),
 
               const Divider(),

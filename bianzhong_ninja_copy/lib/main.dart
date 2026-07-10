@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/app_provider.dart';
-import 'screens/home_screen.dart';
+import 'widgets/demo_mode_router.dart';
 
 void main() {
   runApp(const BianzhongApp());
@@ -54,7 +54,10 @@ class BianzhongApp extends StatelessWidget {
           ),
         ),
         themeMode: ThemeMode.system,
-        home: const HomeScreen(),
+        home: const DemoModeRouter(),
+        routes: {
+          '/home': (context) => const DemoModeRouter(),
+        },
       ),
     );
   }

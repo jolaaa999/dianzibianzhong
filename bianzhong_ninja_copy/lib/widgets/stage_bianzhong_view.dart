@@ -5,9 +5,11 @@ import 'package:flutter/material.dart';
 
 import '../models/sensor_data.dart';
 import '../services/udp_hammer_service.dart';
+import '../models/vision_stick_frame.dart';
 import '../utils/blade_trail.dart';
 import '../utils/constants.dart';
 import '../utils/stage_hit_mapper.dart';
+import '../utils/stage_layout_config.dart';
 
 const double _stageBellWidthRatio = 0.124;
 const double _stageBellHeightRatio = 0.34;
@@ -71,6 +73,7 @@ class _BianzhongBellPainter extends CustomPainter {
   final bool isFollowCurrent;
   final int notePulse;
   final bool flashActive;
+  final double vibrationPhase;
 
   const _BianzhongBellPainter({
     required this.isActive,
@@ -78,6 +81,7 @@ class _BianzhongBellPainter extends CustomPainter {
     this.isFollowCurrent = false,
     this.notePulse = 0,
     this.flashActive = false,
+    this.vibrationPhase = 0,
   });
 
   Set<StageStrikeRegion> get _effectiveHighlightedRegions =>
@@ -85,6 +89,11 @@ class _BianzhongBellPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (isActive && vibrationPhase > 0) {
+      final vibration = math.sin(vibrationPhase * math.pi * 4) * 2.0;
+      canvas.translate(vibration, 0);
+    }
+
     final width = size.width;
     final height = size.height;
     final bellRect = Rect.fromLTWH(
@@ -583,10 +592,134 @@ class _BianzhongBellPainter extends CustomPainter {
         oldDelegate.isFollowCurrent != isFollowCurrent ||
         oldDelegate.notePulse != notePulse ||
         oldDelegate.flashActive != flashActive ||
+        oldDelegate.vibrationPhase != vibrationPhase ||
         previousRegions.length != currentRegions.length ||
         previousRegions.any(
           (region) => !currentRegions.contains(region),
         );
+  }
+}
+
+class _DebugHitBoxPainter extends CustomPainter {
+  final int currentOctave;
+  final Size stageSize;
+
+  const _DebugHitBoxPainter({
+    required this.currentOctave,
+    required this.stageSize,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (final bell in StageBellLayout.bells) {
+      final bellId = BellMapping.getBellId(currentOctave, bell.note);
+      if (bellId == null) continue;
+      final scale = (bell.isUpper ? 0.95 : 1.00) * bell.visualScale;
+      final width = 0.124 * scale;
+      final height = 0.34 * scale;
+      final bellTop = bell.y - height / 2;
+      final bellLeft = bell.x - width / 2;
+      final paintHeight = height * 0.92;
+      final shellRect = Rect.fromLTWH(
+        bellLeft + width * 0.08,
+        bellTop + paintHeight * 0.11,
+        width * 0.84,
+        paintHeight * 0.84,
+      );
+      final layout = StageHitMapper.resolveStrikeLayoutForShellRect(shellRect);
+      _drawRegion(canvas, layout.leftHitRect, Colors.red);
+      _drawRegion(canvas, layout.centerHitRect, Colors.green);
+      _drawRegion(canvas, layout.rightHitRect, Colors.blue);
+    }
+  }
+
+  void _drawRegion(Canvas canvas, Rect normalizedRect, Color color) {
+    final rect = Rect.fromLTWH(
+      normalizedRect.left * stageSize.width,
+      normalizedRect.top * stageSize.height,
+      normalizedRect.width * stageSize.width,
+      normalizedRect.height * stageSize.height,
+    );
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..color = color.withValues(alpha: 0.25)
+        ..style = PaintingStyle.fill,
+    );
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..color = color.withValues(alpha: 0.6)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _DebugHitBoxPainter oldDelegate) {
+    return oldDelegate.currentOctave != currentOctave ||
+        oldDelegate.stageSize != stageSize;
+  }
+}
+
+class _StickCursorPainter extends CustomPainter {
+  final Color color;
+  final double confidence;
+
+  const _StickCursorPainter({
+    required this.color,
+    required this.confidence,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    canvas.drawCircle(
+      center,
+      14,
+      Paint()
+        ..color = color.withValues(alpha: 0.25 + confidence * 0.35)
+        ..style = PaintingStyle.fill,
+    );
+    canvas.drawCircle(
+      center,
+      14,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
+    canvas.drawCircle(center, 3, Paint()..color = Colors.white);
+  }
+
+  @override
+  bool shouldRepaint(covariant _StickCursorPainter oldDelegate) {
+    return oldDelegate.color != color || oldDelegate.confidence != confidence;
+  }
+}
+
+class _AimRingPainter extends CustomPainter {
+  final double confidence;
+
+  const _AimRingPainter({required this.confidence});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2;
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..color = Colors.amber.withValues(alpha: 0.15 + confidence * 0.25)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _AimRingPainter oldDelegate) {
+    return oldDelegate.confidence != confidence;
   }
 }
 
@@ -691,30 +824,18 @@ class _HammerPainter extends CustomPainter {
   }
 }
 
-class StageBellConfig {
-  final String note;
-  final double x;
-  final bool isUpper;
-  final double visualScale;
-
-  const StageBellConfig({
-    required this.note,
-    required this.x,
-    required this.isUpper,
-    required this.visualScale,
-  });
-}
-
 class StageBianzhongView extends StatefulWidget {
   final int currentOctave;
   final int? lastStrikeBellId;
   final Set<int> activeBellIds;
   final List<ActiveHammerInfo> activeHammers;
   final List<SensorData> hammerSensorStates;
+  final List<VisionStickFrame> stickFrames;
   final bool ninjaMode;
   final Map<String, BladeTrail> bladeTrails;
   final int? followAlongCurrentBellId;
   final int followAlongNotePulse;
+  final bool debugShowHitBoxes;
   final void Function(
     int bellId,
     double intensity, {
@@ -729,27 +850,14 @@ class StageBianzhongView extends StatefulWidget {
     required this.activeBellIds,
     required this.activeHammers,
     required this.hammerSensorStates,
+    this.stickFrames = const [],
     this.ninjaMode = false,
     this.bladeTrails = const {},
     this.followAlongCurrentBellId,
     this.followAlongNotePulse = 0,
+    this.debugShowHitBoxes = false,
     required this.onBellTapped,
   });
-
-  static const List<StageBellConfig> _bells = [
-    StageBellConfig(note: 'C', x: 0.08, isUpper: false, visualScale: 1.12),
-    StageBellConfig(note: 'D', x: 0.22, isUpper: false, visualScale: 1.10),
-    StageBellConfig(note: 'E', x: 0.36, isUpper: false, visualScale: 1.08),
-    StageBellConfig(note: 'F', x: 0.50, isUpper: false, visualScale: 1.05),
-    StageBellConfig(note: 'G', x: 0.64, isUpper: false, visualScale: 1.03),
-    StageBellConfig(note: 'A', x: 0.78, isUpper: false, visualScale: 1.01),
-    StageBellConfig(note: 'B', x: 0.92, isUpper: false, visualScale: 0.98),
-    StageBellConfig(note: 'C#', x: 0.20, isUpper: true, visualScale: 1.12),
-    StageBellConfig(note: 'D#', x: 0.35, isUpper: true, visualScale: 1.10),
-    StageBellConfig(note: 'F#', x: 0.50, isUpper: true, visualScale: 1.08),
-    StageBellConfig(note: 'G#', x: 0.65, isUpper: true, visualScale: 1.06),
-    StageBellConfig(note: 'A#', x: 0.80, isUpper: true, visualScale: 1.04),
-  ];
 
   @override
   State<StageBianzhongView> createState() => _StageBianzhongViewState();
@@ -773,6 +881,7 @@ class _StageBianzhongViewState extends State<StageBianzhongView>
   Offset? _lastTrailPos;
   final Map<String, DateTime> _mouseTrailHitTimes = {};
   final Set<int> _flashBellIds = {};
+  final Map<int, double> _vibrationPhaseByBellId = {};
   int _lastNotePulse = 0;
 
   @override
@@ -803,6 +912,17 @@ class _StageBianzhongViewState extends State<StageBianzhongView>
           setState(() => _flashBellIds.remove(bellId));
         }
       });
+    }
+
+    for (final bellId in widget.activeBellIds) {
+      if (!oldWidget.activeBellIds.contains(bellId)) {
+        _vibrationPhaseByBellId[bellId] = 1.0;
+        Future.delayed(AppConstants.bellHighlightDuration, () {
+          if (mounted) {
+            setState(() => _vibrationPhaseByBellId.remove(bellId));
+          }
+        });
+      }
     }
   }
 
@@ -836,6 +956,18 @@ class _StageBianzhongViewState extends State<StageBianzhongView>
       if (hit == null) {
         continue;
       }
+      highlightedRegionsByBellId
+          .putIfAbsent(hit.bellId, () => <StageStrikeRegion>{})
+          .add(hit.region);
+    }
+
+    for (final frame in widget.stickFrames) {
+      if (!frame.isVisible) continue;
+      final hit = StageHitMapper.hitTestStagePoint(
+        currentOctave: widget.currentOctave,
+        point: Offset(frame.x, frame.y),
+      );
+      if (hit == null) continue;
       highlightedRegionsByBellId
           .putIfAbsent(hit.bellId, () => <StageStrikeRegion>{})
           .add(hit.region);
@@ -917,7 +1049,7 @@ class _StageBianzhongViewState extends State<StageBianzhongView>
               ),
               child: Stack(
                 children: [
-                  for (final bell in StageBianzhongView._bells)
+                  for (final bell in StageBellLayout.bells)
                     _buildBell(
                       size: size,
                       bell: bell,
@@ -935,6 +1067,10 @@ class _StageBianzhongViewState extends State<StageBianzhongView>
                       hammer: hammer,
                       sensor: sensorByDeviceId[hammer.deviceId],
                     ),
+                  for (final frame in widget.stickFrames)
+                    _buildStickCursor(size: size, frame: frame),
+                  for (final frame in widget.stickFrames)
+                    _buildAimHint(size: size, frame: frame),
                   if (widget.ninjaMode)
                     Positioned.fill(
                       child: IgnorePointer(
@@ -942,6 +1078,17 @@ class _StageBianzhongViewState extends State<StageBianzhongView>
                           painter: _BladeTrailPainter(
                             trails: allTrails,
                             size: size,
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (widget.debugShowHitBoxes)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: CustomPaint(
+                          painter: _DebugHitBoxPainter(
+                            currentOctave: widget.currentOctave,
+                            stageSize: size,
                           ),
                         ),
                       ),
@@ -971,7 +1118,7 @@ class _StageBianzhongViewState extends State<StageBianzhongView>
 
   Widget _buildBell({
     required Size size,
-    required StageBellConfig bell,
+    required StageBellLayout bell,
     required Map<int, Set<StageStrikeRegion>> highlightedRegionsByBellId,
   }) {
     final bellId = BellMapping.getBellId(widget.currentOctave, bell.note);
@@ -991,6 +1138,7 @@ class _StageBianzhongViewState extends State<StageBianzhongView>
     final isFollowCurrent = widget.followAlongCurrentBellId == bellId;
     final highlightedRegions =
         highlightedRegionsByBellId[bellId] ?? const <StageStrikeRegion>{};
+    final vibrationPhase = _vibrationPhaseByBellId[bellId] ?? 0.0;
 
     return Positioned(
       left: centerX - width / 2,
@@ -1011,6 +1159,7 @@ class _StageBianzhongViewState extends State<StageBianzhongView>
                   isFollowCurrent: isFollowCurrent,
                   notePulse: isFollowCurrent ? widget.followAlongNotePulse : 0,
                   flashActive: _flashBellIds.contains(bellId),
+                  vibrationPhase: vibrationPhase,
                 ),
                 size: Size(width, height * 0.92),
               ),
@@ -1027,6 +1176,79 @@ class _StageBianzhongViewState extends State<StageBianzhongView>
         ),
       ),
     );
+  }
+
+  Widget _buildStickCursor({required Size size, required VisionStickFrame frame}) {
+    final color = frame.stickId == 1
+        ? const Color(0xff4fc3ff)
+        : const Color(0xffffc14f);
+
+    if (!frame.isVisible) {
+      return Positioned(
+        left: frame.stickId == 1 ? 8 : null,
+        right: frame.stickId == 2 ? 8 : null,
+        top: size.height * 0.5 - 12,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.orange.withValues(alpha: 0.85),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(
+            '棒${frame.stickId} 离屏',
+            style: const TextStyle(color: Colors.white, fontSize: 12),
+          ),
+        ),
+      );
+    }
+
+    return Positioned(
+      left: frame.x * size.width - 16,
+      top: frame.y * size.height - 16,
+      width: 32,
+      height: 32,
+      child: IgnorePointer(
+        child: CustomPaint(
+          painter: _StickCursorPainter(
+            color: color,
+            confidence: frame.confidence,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAimHint({required Size size, required VisionStickFrame frame}) {
+    if (!frame.isVisible) return const SizedBox.shrink();
+    final hit = StageHitMapper.hitTestStagePoint(
+      currentOctave: widget.currentOctave,
+      point: Offset(frame.x, frame.y),
+    );
+    if (hit == null) return const SizedBox.shrink();
+
+    for (final bell in StageBellLayout.bells) {
+      final bellId = BellMapping.getBellId(widget.currentOctave, bell.note);
+      if (bellId != hit.bellId) continue;
+      final upperScale = bell.isUpper ? 0.94 : 1.10;
+      final scale = upperScale * bell.visualScale;
+      final width = size.width * _stageBellWidthRatio * scale;
+      final height = size.height * _stageBellHeightRatio * scale;
+      final centerX = bell.x * size.width;
+      final top = size.height *
+          (bell.isUpper ? _stageUpperRowTopRatio : _stageLowerRowTopRatio);
+      return Positioned(
+        left: centerX - width / 2 - 6,
+        top: top - 6,
+        width: width + 12,
+        height: height + 12,
+        child: IgnorePointer(
+          child: CustomPaint(
+            painter: _AimRingPainter(confidence: frame.confidence),
+          ),
+        ),
+      );
+    }
+    return const SizedBox.shrink();
   }
 
   String _numberedNotationLabel(String note) {
@@ -1145,7 +1367,7 @@ class _StageBianzhongViewState extends State<StageBianzhongView>
     StageStrikeHitResult? bestMatch;
     double bestDistance = double.infinity;
 
-    for (final bell in StageBianzhongView._bells) {
+    for (final bell in StageBellLayout.bells) {
       final bellId = BellMapping.getBellId(widget.currentOctave, bell.note);
       if (bellId == null) {
         continue;

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:math' as math;
 
 import 'constants.dart';
+import 'stage_layout_config.dart';
 import '../models/sensor_data.dart';
 
 enum StageStrikeRegion { left, right, center }
@@ -48,6 +49,16 @@ class _StageBellLayoutConfig {
     required this.isUpper,
     required this.visualScale,
   });
+
+  factory _StageBellLayoutConfig.fromStage(StageBellLayout layout) {
+    return _StageBellLayoutConfig(
+      note: layout.note,
+      x: layout.x,
+      y: layout.y,
+      isUpper: layout.isUpper,
+      visualScale: layout.visualScale,
+    );
+  }
 }
 
 class _StageBellGeometry {
@@ -86,20 +97,26 @@ class StageHitMapper {
   static const double _yawGain = 1.0;
   static const double _pitchGain = 1.0;
 
-  static const List<_StageBellLayoutConfig> _bells = [
-    _StageBellLayoutConfig(note: 'C', x: 0.10, y: 0.78, isUpper: false, visualScale: 1.10),
-    _StageBellLayoutConfig(note: 'D', x: 0.23, y: 0.78, isUpper: false, visualScale: 1.06),
-    _StageBellLayoutConfig(note: 'E', x: 0.36, y: 0.78, isUpper: false, visualScale: 1.02),
-    _StageBellLayoutConfig(note: 'F', x: 0.50, y: 0.78, isUpper: false, visualScale: 1.00),
-    _StageBellLayoutConfig(note: 'G', x: 0.64, y: 0.78, isUpper: false, visualScale: 0.97),
-    _StageBellLayoutConfig(note: 'A', x: 0.77, y: 0.78, isUpper: false, visualScale: 0.94),
-    _StageBellLayoutConfig(note: 'B', x: 0.90, y: 0.78, isUpper: false, visualScale: 0.92),
-    _StageBellLayoutConfig(note: 'C#', x: 0.25, y: 0.27, isUpper: true, visualScale: 1.12),
-    _StageBellLayoutConfig(note: 'D#', x: 0.375, y: 0.27, isUpper: true, visualScale: 1.04),
-    _StageBellLayoutConfig(note: 'F#', x: 0.50, y: 0.27, isUpper: true, visualScale: 0.96),
-    _StageBellLayoutConfig(note: 'G#', x: 0.625, y: 0.27, isUpper: true, visualScale: 0.88),
-    _StageBellLayoutConfig(note: 'A#', x: 0.75, y: 0.27, isUpper: true, visualScale: 0.80),
-  ];
+  static final List<_StageBellLayoutConfig> _bells = StageBellLayout.bells
+      .map(_StageBellLayoutConfig.fromStage)
+      .toList();
+
+  /// 调试模式：返回当前八度所有钟的碰撞布局
+  static List<({int bellId, StageStrikeLayout layout})> layoutsForOctave(
+    int currentOctave,
+  ) {
+    final results = <({int bellId, StageStrikeLayout layout})>[];
+    for (final bell in _bells) {
+      final bellId = BellMapping.getBellId(currentOctave, bell.note);
+      if (bellId == null) continue;
+      final geometry = _resolveBellGeometry(bell);
+      results.add((
+        bellId: bellId,
+        layout: resolveStrikeLayoutForShellRect(geometry.shellRect),
+      ));
+    }
+    return results;
+  }
 
   static Offset sensorToStagePoint({
     required double yaw,
