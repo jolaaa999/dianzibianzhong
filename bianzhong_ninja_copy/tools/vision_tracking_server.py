@@ -21,6 +21,7 @@ import math
 import threading
 import time
 from dataclasses import dataclass
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Dict, List, Optional, Set
 
 try:
@@ -197,6 +198,7 @@ class VisionTrackingRuntime:
         self.tracker = tracker
         self.calibrator = calibrator
         self._latest_frames: List[TrackedStick] = []
+        self._latest_jpeg: Optional[bytes] = None
         self._lock = threading.Lock()
         self._running = False
         self._thread: Optional[threading.Thread] = None
@@ -221,6 +223,44 @@ class VisionTrackingRuntime:
         with self._lock:
             return list(self._latest_frames)
 
+    def get_snapshot_jpeg(self) -> Optional[bytes]:
+        with self._lock:
+            return self._latest_jpeg
+
+    def _render_preview(self, frame, sticks: List[TrackedStick]):
+        preview = frame.copy()
+        height, width = preview.shape[:2]
+        if self.calibrator is not None and not self.calibrator.is_ready:
+            progress = int(self.calibrator.progress() * 100)
+            cv2.putText(
+                preview,
+                f"Calibrating threshold... {progress}%",
+                (20, 36),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.8,
+                (0, 220, 255),
+                2,
+                cv2.LINE_AA,
+            )
+        for stick in sticks:
+            if not stick.visible:
+                continue
+            px = int(stick.x * width)
+            py = int(stick.y * height)
+            color = (255, 200, 80) if stick.stick_id == 1 else (80, 200, 255)
+            cv2.circle(preview, (px, py), 16, color, 2)
+            cv2.putText(
+                preview,
+                f"#{stick.stick_id}",
+                (px + 12, py - 12),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                color,
+                2,
+                cv2.LINE_AA,
+            )
+        return preview
+
     def _capture_loop(self) -> None:
         self._capture = cv2.VideoCapture(self.camera_index, cv2.CAP_DSHOW)
         if not self._capture.isOpened():
@@ -244,41 +284,16 @@ class VisionTrackingRuntime:
                 self.tracker.threshold = self.calibrator.threshold
 
             sticks = self.tracker.detect(frame)
+            preview = self._render_preview(frame, sticks)
+            ok_jpeg, jpeg = cv2.imencode(
+                ".jpg", preview, [int(cv2.IMWRITE_JPEG_QUALITY), 72]
+            )
             with self._lock:
                 self._latest_frames = sticks
+                if ok_jpeg:
+                    self._latest_jpeg = jpeg.tobytes()
 
             if self.preview:
-                preview = frame.copy()
-                height, width = preview.shape[:2]
-                if self.calibrator is not None and not self.calibrator.is_ready:
-                    progress = int(self.calibrator.progress() * 100)
-                    cv2.putText(
-                        preview,
-                        f"Calibrating threshold... {progress}%",
-                        (20, 36),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.8,
-                        (0, 220, 255),
-                        2,
-                        cv2.LINE_AA,
-                    )
-                for stick in sticks:
-                    if not stick.visible:
-                        continue
-                    px = int(stick.x * width)
-                    py = int(stick.y * height)
-                    color = (255, 200, 80) if stick.stick_id == 1 else (80, 200, 255)
-                    cv2.circle(preview, (px, py), 16, color, 2)
-                    cv2.putText(
-                        preview,
-                        f"#{stick.stick_id}",
-                        (px + 12, py - 12),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.6,
-                        color,
-                        2,
-                        cv2.LINE_AA,
-                    )
                 cv2.imshow("Bianzhong Vision Tracking", preview)
                 if cv2.waitKey(1) & 0xFF == ord("q"):
                     self._running = False
@@ -289,16 +304,62 @@ class VisionTrackingRuntime:
                 time.sleep(interval - elapsed)
 
 
+class SnapshotHttpServer:
+    """HTTP /snapshot 端点，供 Flutter 校准向导预览摄像头画面。"""
+
+    def __init__(self, runtime: VisionTrackingRuntime, host: str, port: int) -> None:
+        self._runtime = runtime
+        self._host = host
+        self._port = port
+        self._httpd: Optional[HTTPServer] = None
+        self._thread: Optional[threading.Thread] = None
+
+    def start(self) -> None:
+        runtime = self._runtime
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, format, *args) -> None:
+                return
+
+            def do_GET(self) -> None:
+                if self.path.split("?", 1)[0] != "/snapshot":
+                    self.send_response(404)
+                    self.end_headers()
+                    return
+                data = runtime.get_snapshot_jpeg()
+                if not data:
+                    self.send_response(503)
+                    self.end_headers()
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "image/jpeg")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(data)
+
+        self._httpd = HTTPServer((self._host, self._port), Handler)
+        self._thread = threading.Thread(target=self._httpd.serve_forever, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        if self._httpd is not None:
+            self._httpd.shutdown()
+            self._httpd = None
+
+
 async def broadcast_loop(
     websocket,
     runtime: VisionTrackingRuntime,
     fps: int,
 ) -> None:
     interval = 1.0 / fps
+    tick = 0
     while True:
         started = time.time()
         timestamp = int(time.time() * 1000)
-        for stick in runtime.latest_frames():
+        sticks = runtime.latest_frames()
+        for stick in sticks:
             payload = {
                 "type": "stick_frame",
                 "stick_id": stick.stick_id,
@@ -309,6 +370,27 @@ async def broadcast_loop(
                 "timestamp": timestamp,
             }
             await websocket.send(json.dumps(payload))
+
+        tick += 1
+        if tick >= fps:
+            tick = 0
+            calibrator = runtime.calibrator
+            calibrating = calibrator is not None and not calibrator.is_ready
+            await websocket.send(
+                json.dumps(
+                    {
+                        "type": "tracker_status",
+                        "threshold": runtime.tracker.threshold,
+                        "calibrating": calibrating,
+                        "calibration_progress": calibrator.progress()
+                        if calibrator is not None
+                        else 1.0,
+                        "fps": fps,
+                        "detected_sticks": sum(1 for s in sticks if s.visible),
+                    }
+                )
+            )
+
         elapsed = time.time() - started
         if elapsed < interval:
             await asyncio.sleep(interval - elapsed)
@@ -327,7 +409,27 @@ async def ws_handler(websocket, runtime: VisionTrackingRuntime, fps: int) -> Non
                 await websocket.send(json.dumps({"type": "pong", "timestamp": int(time.time() * 1000)}))
             elif data.get("type") == "recalibrate_threshold":
                 runtime.calibrator = AutoThresholdCalibrator()
-                await websocket.send(json.dumps({"type": "calibration_started"}))
+                await websocket.send(
+                    json.dumps(
+                        {
+                            "type": "calibration_started",
+                            "threshold": runtime.tracker.threshold,
+                        }
+                    )
+                )
+            elif data.get("type") == "set_threshold":
+                runtime.tracker.threshold = int(
+                    max(160, min(245, data.get("threshold", runtime.tracker.threshold)))
+                )
+                runtime.calibrator = None
+                await websocket.send(
+                    json.dumps(
+                        {
+                            "type": "calibration_complete",
+                            "threshold": runtime.tracker.threshold,
+                        }
+                    )
+                )
     finally:
         sender.cancel()
         print("客户端已断开")
@@ -347,6 +449,12 @@ async def main() -> None:
         help="启动时根据环境光自动校准阈值",
     )
     parser.add_argument("--preview", action="store_true", help="显示本地调试预览窗口")
+    parser.add_argument(
+        "--snapshot-port",
+        type=int,
+        default=8766,
+        help="HTTP 快照预览端口（/snapshot）",
+    )
     args = parser.parse_args()
 
     calibrator = AutoThresholdCalibrator() if args.auto_threshold else None
@@ -359,18 +467,22 @@ async def main() -> None:
         calibrator=calibrator,
     )
     runtime.start()
+    snapshot_server = SnapshotHttpServer(runtime, args.host, args.snapshot_port)
+    snapshot_server.start()
 
     async def handler(websocket):
         await ws_handler(websocket, runtime, args.fps)
 
     print(
         f"视觉追踪服务: ws://{args.host}:{args.port}  camera={args.camera}  "
-        f"fps={args.fps}  auto_threshold={args.auto_threshold}"
+        f"fps={args.fps}  auto_threshold={args.auto_threshold}  "
+        f"snapshot=http://{args.host}:{args.snapshot_port}/snapshot"
     )
     async with websockets.serve(handler, args.host, args.port):
         try:
             await asyncio.Future()
         finally:
+            snapshot_server.stop()
             runtime.stop()
 
 

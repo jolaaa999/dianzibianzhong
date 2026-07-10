@@ -10,6 +10,8 @@ class AppConstants {
 
   // 视觉追踪（PRD 方案一）
   static const String defaultVisionWsUrl = 'ws://127.0.0.1:8765';
+  static const String defaultVisionSnapshotUrl = 'http://127.0.0.1:8766/snapshot';
+  static const Duration visionPredictionHold = Duration(milliseconds: 150);
   static const Duration visionFrameTimeout = Duration(milliseconds: 200);
   static const Duration visionStickStaleTimeout = Duration(milliseconds: 250);
   static const Duration visionReconnectDelay = Duration(seconds: 3);
@@ -204,6 +206,28 @@ class BellMapping {
     return 'bell_c3.wav';
   }
 
+  /// 是否存在该 bellId 的可用采样（非全局 fallback）
+  static bool hasDedicatedAsset(BellNote bell) {
+    for (final candidate in _assetCandidatesFor(bell.note, bell.octave)) {
+      if (_assetSet.contains(candidate)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static List<BellAssetAuditEntry> auditAllBells() {
+    return [
+      for (final bell in bells)
+        BellAssetAuditEntry(
+          bellId: bell.id,
+          label: bell.label,
+          resolvedAsset: resolveAssetFileName(bell),
+          hasDedicatedAsset: hasDedicatedAsset(bell),
+        ),
+    ];
+  }
+
   static Iterable<String> _assetCandidatesFor(String note, int octave) sync* {
     final token = _assetTokenFor(note);
 
@@ -300,4 +324,21 @@ class BellNote {
   const BellNote({required this.id, required this.note, required this.octave});
 
   String get label => '$note$octave';
+}
+
+/// 音频资源审计条目
+class BellAssetAuditEntry {
+  final int bellId;
+  final String label;
+  final String resolvedAsset;
+  final bool hasDedicatedAsset;
+
+  const BellAssetAuditEntry({
+    required this.bellId,
+    required this.label,
+    required this.resolvedAsset,
+    required this.hasDedicatedAsset,
+  });
+
+  bool get usesFallback => !hasDedicatedAsset;
 }

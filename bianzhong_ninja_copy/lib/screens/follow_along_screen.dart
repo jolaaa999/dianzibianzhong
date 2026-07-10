@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/song_library.dart';
 import '../models/song_model.dart';
 import '../providers/app_provider.dart';
+import '../widgets/stage_bianzhong_view.dart';
 
 class FollowAlongScreen extends StatelessWidget {
   const FollowAlongScreen({super.key});
@@ -154,6 +155,20 @@ class _PlayingView extends StatelessWidget {
             ),
 
           if (isPlaying || isPaused) ...[
+            Expanded(
+              child: StageBianzhongView(
+                currentOctave: provider.currentOctave,
+                lastStrikeBellId: provider.lastStrikeBellId,
+                activeBellIds: provider.activeBellIds,
+                activeHammers: provider.activeHammers,
+                hammerSensorStates: provider.activeHammerSensorStates,
+                stickFrames: provider.stickFrames,
+                followAlongCurrentBellId: provider.followAlongCurrentBellId,
+                followAlongNotePulse: progress.notePulse,
+                onBellTapped: provider.onBellTapped,
+              ),
+            ),
+            const SizedBox(height: 12),
             LinearProgressIndicator(
               value: song == null
                   ? 0
@@ -192,16 +207,18 @@ class _PlayingView extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 24),
 
             if (progress.currentNoteIndex >= 0 &&
                 song != null &&
                 progress.currentNoteIndex < song.notes.length)
-              _CurrentNoteDisplay(
-                note: song.notes[progress.currentNoteIndex],
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: _CurrentNoteDisplay(
+                  note: song.notes[progress.currentNoteIndex],
+                ),
               ),
 
-            const Spacer(),
+            const SizedBox(height: 16),
 
             Row(
               mainAxisAlignment: MainAxisAlignment.center,

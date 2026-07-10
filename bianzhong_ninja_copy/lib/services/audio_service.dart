@@ -25,16 +25,37 @@ class AudioService {
 
   final List<AudioPlayer> _players = [];
   final List<_ActiveVoice> _activeVoices = [];
+  final Map<int, String> _assetOverrides = {};
   int _nextPlayerIndex = 0;
   double _volume = AppConstants.defaultVolume;
   bool _isEnabled = true;
   bool _reverbEnabled = true;
+  Duration _reverbDelay = AppConstants.audioReverbDelay;
+  double _reverbWetMix = AppConstants.audioReverbWetMix;
+  int _reverbMinVoices = AppConstants.audioReverbMinVoices;
 
   double get volume => _volume;
   bool get isEnabled => _isEnabled;
   bool get reverbEnabled => _reverbEnabled;
+  Duration get reverbDelay => _reverbDelay;
+  double get reverbWetMix => _reverbWetMix;
+  int get reverbMinVoices => _reverbMinVoices;
   int get activeVoiceCount =>
       _activeVoices.where((voice) => !voice.isReverbLayer).length;
+  Map<int, String> get assetOverrides => Map.unmodifiable(_assetOverrides);
+
+  void setBellAssetOverride(int bellId, String assetFileName) {
+    if (bellId < 1 || bellId > AppConstants.bellCount) return;
+    _assetOverrides[bellId] = assetFileName;
+  }
+
+  void clearBellAssetOverride(int bellId) {
+    _assetOverrides.remove(bellId);
+  }
+
+  void clearAllBellAssetOverrides() {
+    _assetOverrides.clear();
+  }
 
   AudioService() {
     _initializePlayers();
@@ -63,36 +84,31 @@ class AudioService {
     return player;
   }
 
-  Future<void> playBell(int bellId, double intensity) async {
+  /// 返回从调用到 `play()` 完成的毫秒数（音频启动延迟参考）
+  Future<int> playBell(int bellId, double intensity) async {
     if (!_isEnabled || bellId < 1 || bellId > AppConstants.bellCount) {
-      return;
+      return 0;
     }
 
+    final started = DateTime.now();
     try {
-      if (_players.isEmpty) return;
+      if (_players.isEmpty) return 0;
       final player = _acquirePlayer();
 
       final bell = BellMapping.getBellById(bellId);
       final n = activeVoiceCount + 1;
-      // 每增加一个同时发声的音，整体增益衰减约 3dB
       final gainCompensation = math.pow(10, -3 * (n - 1) / 20).toDouble();
       var adjustedVolume = _volume * intensity * gainCompensation;
 
-      // 简化 DRC：三音以上进一步压缩
-      if (n >= AppConstants.audioReverbMinVoices) {
-        final masterGain = (1.0 / math.sqrt(n)).clamp(0.3, 1.0);
+      if (n >= 2) {
+        final masterGain = (1.0 / math.sqrt(n)).clamp(0.35, 1.0);
         adjustedVolume *= masterGain;
       }
 
-      final assetFileName = BellMapping.resolveAssetFileName(bell);
+      final assetFileName =
+          _assetOverrides[bellId] ?? BellMapping.resolveAssetFileName(bell);
       final assetPath = 'audio/$assetFileName';
       final dryVolume = adjustedVolume.clamp(0.0, 1.0);
-
-      developer.log(
-        '播放编钟 $bellId (${bell.label}) 强度=${intensity.toStringAsFixed(2)} '
-        '复音=$n 音量=${dryVolume.toStringAsFixed(2)}',
-        name: 'AudioService',
-      );
 
       _activeVoices.add(
         _ActiveVoice(
@@ -105,11 +121,18 @@ class AudioService {
       await player.setVolume(dryVolume);
       await player.play(AssetSource(assetPath));
 
-      if (_reverbEnabled && n >= AppConstants.audioReverbMinVoices) {
-        _scheduleReverbTail(bellId: bellId, assetPath: assetPath, dryVolume: dryVolume);
+      if (_reverbEnabled && n >= _reverbMinVoices) {
+        _scheduleReverbTail(
+          bellId: bellId,
+          assetPath: assetPath,
+          dryVolume: dryVolume,
+        );
       }
+
+      return DateTime.now().difference(started).inMilliseconds;
     } catch (e) {
       developer.log('播放音效失败: $e', name: 'AudioService', error: e);
+      return DateTime.now().difference(started).inMilliseconds;
     }
   }
 
@@ -119,10 +142,9 @@ class AudioService {
     required double dryVolume,
   }) {
     final reverbPlayer = _acquirePlayer();
-    final wetVolume =
-        (dryVolume * AppConstants.audioReverbWetMix).clamp(0.05, 0.42);
+    final wetVolume = (dryVolume * _reverbWetMix).clamp(0.05, 0.42);
 
-    Future.delayed(AppConstants.audioReverbDelay, () async {
+    Future.delayed(_reverbDelay, () async {
       if (!_isEnabled) return;
       try {
         _activeVoices.add(
@@ -141,19 +163,32 @@ class AudioService {
     });
   }
 
+  void configureReverb({
+    Duration? delay,
+    double? wetMix,
+    int? minVoices,
+  }) {
+    if (delay != null) {
+      _reverbDelay = delay;
+    }
+    if (wetMix != null) {
+      _reverbWetMix = wetMix.clamp(0.05, 0.6);
+    }
+    if (minVoices != null) {
+      _reverbMinVoices = minVoices.clamp(2, 8);
+    }
+  }
+
   void setVolume(double volume) {
     _volume = volume.clamp(0.0, 1.0);
-    developer.log('音量设置为: ${(_volume * 100).toInt()}%', name: 'AudioService');
   }
 
   void setEnabled(bool enabled) {
     _isEnabled = enabled;
-    developer.log('音频${enabled ? "已启用" : "已禁用"}', name: 'AudioService');
   }
 
   void setReverbEnabled(bool enabled) {
     _reverbEnabled = enabled;
-    developer.log('厅堂混响${enabled ? "已启用" : "已禁用"}', name: 'AudioService');
   }
 
   Future<void> stopAll() async {
@@ -161,7 +196,6 @@ class AudioService {
       await player.stop();
     }
     _activeVoices.clear();
-    developer.log('停止所有音频播放', name: 'AudioService');
   }
 
   void dispose() {
@@ -171,7 +205,6 @@ class AudioService {
     _players.clear();
     _activeVoices.clear();
     _nextPlayerIndex = 0;
-    developer.log('音频服务已释放', name: 'AudioService');
   }
 }
 

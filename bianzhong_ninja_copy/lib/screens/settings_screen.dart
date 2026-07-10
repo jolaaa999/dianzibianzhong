@@ -36,6 +36,44 @@ class SettingsScreen extends StatelessWidget {
                 onChanged: provider.setReverbEnabled,
                 secondary: const Icon(Icons.surround_sound),
               ),
+              if (provider.reverbEnabled) ...[
+                ListTile(
+                  leading: const Icon(Icons.timer),
+                  title: const Text('混响延迟'),
+                  subtitle: Slider(
+                    value: provider.reverbDelayMs.toDouble(),
+                    min: 20,
+                    max: 200,
+                    divisions: 18,
+                    label: '${provider.reverbDelayMs}ms',
+                    onChanged: (v) => provider.setReverbDelayMs(v.round()),
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.waves),
+                  title: const Text('混响湿声比例'),
+                  subtitle: Slider(
+                    value: provider.reverbWetMix,
+                    min: 0.05,
+                    max: 0.6,
+                    divisions: 11,
+                    label: provider.reverbWetMix.toStringAsFixed(2),
+                    onChanged: provider.setReverbWetMix,
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.looks_3),
+                  title: const Text('混响触发复音数'),
+                  subtitle: Slider(
+                    value: provider.reverbMinVoices.toDouble(),
+                    min: 2,
+                    max: 8,
+                    divisions: 6,
+                    label: '${provider.reverbMinVoices}',
+                    onChanged: (v) => provider.setReverbMinVoices(v.round()),
+                  ),
+                ),
+              ],
               ListTile(
                 leading: const Icon(Icons.volume_down),
                 title: const Text('音量'),
@@ -161,6 +199,31 @@ class SettingsScreen extends StatelessWidget {
               ),
               ListTile(
                 leading: const Icon(Icons.speed),
+                title: const Text('延迟指标'),
+                subtitle: Text(provider.latencyMetrics.summary),
+                trailing: Icon(
+                  provider.latencyMetrics.meetsPrdTarget
+                      ? Icons.check_circle
+                      : Icons.info_outline,
+                  color: provider.latencyMetrics.meetsPrdTarget
+                      ? Colors.green
+                      : Colors.orange,
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.refresh),
+                title: const Text('重置延迟统计'),
+                onTap: provider.resetLatencyMetrics,
+              ),
+              ListTile(
+                leading: const Icon(Icons.download),
+                title: const Text('导出延迟 CSV'),
+                subtitle: Text('已记录 ${provider.latencyHistory.length} 条样本'),
+                enabled: provider.latencyHistory.isNotEmpty,
+                onTap: () => _exportLatencyCsv(context, provider),
+              ),
+              ListTile(
+                leading: const Icon(Icons.speed),
                 title: const Text('视觉敲击最低速度'),
                 subtitle: Slider(
                   value: provider.visionStrikeDetector.minStrikeSpeed,
@@ -256,6 +319,23 @@ class SettingsScreen extends StatelessWidget {
                 subtitle: const Text('依次播放所有编钟音效'),
                 onTap: () => _testAllBells(context, provider),
               ),
+              ListTile(
+                leading: const Icon(Icons.fact_check),
+                title: const Text('音频资源完整性检查'),
+                subtitle: Text(_audioAuditSummary(provider)),
+                onTap: () => _showAudioAuditDialog(context, provider),
+              ),
+              ListTile(
+                leading: const Icon(Icons.clear_all),
+                title: const Text('清除音色热替换'),
+                subtitle: const Text('恢复所有 bellId 为默认采样映射'),
+                onTap: () {
+                  provider.clearBellAssetOverrides();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('已清除音色覆盖')),
+                  );
+                },
+              ),
 
               const Divider(),
 
@@ -302,6 +382,76 @@ class SettingsScreen extends StatelessWidget {
           fontWeight: FontWeight.bold,
           color: Colors.blue,
         ),
+      ),
+    );
+  }
+
+  Future<void> _exportLatencyCsv(
+    BuildContext context,
+    AppProvider provider,
+  ) async {
+    try {
+      final path = await provider.exportLatencyCsv();
+      if (!context.mounted) return;
+      if (path == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('暂无延迟样本可导出')),
+        );
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已导出至 $path')),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('导出失败: $error')),
+      );
+    }
+  }
+
+  String _audioAuditSummary(AppProvider provider) {
+    final entries = provider.auditBellAssets();
+    final missing = entries.where((entry) => entry.usesFallback).length;
+    return missing == 0
+        ? '60/60 bellId 均有可用采样'
+        : '${entries.length - missing}/${entries.length} 有专用采样，$missing 个使用 fallback';
+  }
+
+  void _showAudioAuditDialog(BuildContext context, AppProvider provider) {
+    final entries = provider.auditBellAssets();
+    final missing = entries.where((entry) => entry.usesFallback).toList();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('音频资源检查'),
+        content: SizedBox(
+          width: 420,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  missing.isEmpty
+                      ? '全部 ${entries.length} 个 bellId 均有可用采样。'
+                      : '以下 ${missing.length} 个 bellId 将回退到 bell_c3.wav：',
+                ),
+                if (missing.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  for (final entry in missing)
+                    Text('• ${entry.label} (id=${entry.bellId}) → ${entry.resolvedAsset}'),
+                ],
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('关闭'),
+          ),
+        ],
       ),
     );
   }

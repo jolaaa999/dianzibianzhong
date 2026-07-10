@@ -139,7 +139,8 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
             if (provider.inputMode == InputMode.vision) ...[
               _buildStep('1', '启动 Python/OpenCV 视觉追踪服务'),
               _buildStep('2', '连接 WebSocket 接收 stick 坐标'),
-              _buildStep('3', '挥动敲击棒，舞台显示光标并触发编钟'),
+              _buildStep('3', '无摄像头时可运行 mock_vision_server.py --strike-demo'),
+              _buildStep('4', '挥动敲击棒，舞台显示光标并触发编钟'),
             ] else if (provider.inputMode == InputMode.touchOnly) ...[
               _buildStep('1', '仅使用屏幕触控/鼠标敲击编钟'),
               _buildStep('2', '适用于 UI 调试，无需硬件'),
@@ -202,6 +203,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
                   style: TextStyle(color: Colors.red[700]),
                 ),
               ),
+            if (connected) _buildTrackerStatusPanel(provider),
             const SizedBox(height: 12),
             ...provider.stickFrames.map(_buildStickFrameTile),
             if (provider.stickFrames.isEmpty)
@@ -235,6 +237,51 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildTrackerStatusPanel(AppProvider provider) {
+    final status = provider.visionTrackerStatus;
+    final threshold = status?.threshold ?? 220;
+    final visibleSticks =
+        provider.stickFrames.where((frame) => frame.isVisible).length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          status?.summary ?? '摄像头阈值: $threshold（等待服务状态…）',
+          style: TextStyle(color: Colors.grey[800], fontSize: 13),
+        ),
+        if (status?.calibrating == true) ...[
+          const SizedBox(height: 8),
+          LinearProgressIndicator(value: status!.calibrationProgress),
+        ],
+        const SizedBox(height: 8),
+        Text(
+          '当前识别: $visibleSticks / 2 棒',
+          style: TextStyle(color: Colors.grey[600], fontSize: 12),
+        ),
+        Slider(
+          value: threshold.toDouble(),
+          min: 160,
+          max: 245,
+          divisions: 17,
+          label: '$threshold',
+          onChanged: (value) => provider.setVisionThreshold(value.round()),
+        ),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: provider.requestVisionThresholdRecalibration,
+                icon: const Icon(Icons.auto_fix_high, size: 18),
+                label: const Text('自动校准'),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 

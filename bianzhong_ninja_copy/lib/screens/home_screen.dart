@@ -52,13 +52,15 @@ class HomeScreen extends StatelessWidget {
       ),
       body: Column(
         children: [
-          const ConnectionStatusWidget(),
+          const _ConnectionBar(),
           Expanded(
             child: Stack(
               children: const [
                 _PerformancePage(),
                 _FollowAlongCountdownOverlay(),
+                _DemoPausedOverlay(),
                 _VisionEdgeWarningOverlay(),
+                _LatencyDebugOverlay(),
               ],
             ),
           ),
@@ -113,6 +115,20 @@ class _PerformancePage extends StatelessWidget {
   }
 }
 
+class _ConnectionBar extends StatelessWidget {
+  const _ConnectionBar();
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<AppProvider>();
+    if (provider.inputMode == InputMode.touchOnly ||
+        (provider.inputMode == InputMode.vision && provider.demoModeEnabled)) {
+      return const SizedBox.shrink();
+    }
+    return const ConnectionStatusWidget();
+  }
+}
+
 class _FollowAlongCountdownOverlay extends StatelessWidget {
   const _FollowAlongCountdownOverlay();
 
@@ -136,6 +152,36 @@ class _FollowAlongCountdownOverlay extends StatelessWidget {
               fontSize: 96,
               fontWeight: FontWeight.bold,
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DemoPausedOverlay extends StatelessWidget {
+  const _DemoPausedOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<AppProvider>();
+    if (!provider.isDemoPaused) {
+      return const SizedBox.shrink();
+    }
+
+    return Positioned(
+      left: 16,
+      right: 16,
+      top: 16,
+      child: Material(
+        color: Colors.black.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(8),
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Text(
+            '演示已暂停 — 点击顶部 ▶ 继续',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
           ),
         ),
       ),
@@ -186,20 +232,86 @@ class _VisionEdgeWarningOverlay extends StatelessWidget {
   }
 }
 
+class _LatencyDebugOverlay extends StatelessWidget {
+  const _LatencyDebugOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<AppProvider>();
+    if (!provider.debugShowHitBoxes) {
+      return const SizedBox.shrink();
+    }
+
+    final metrics = provider.latencyMetrics;
+    if (metrics.sampleCount == 0 && metrics.lastWsRttMs == null) {
+      return Positioned(
+        left: 12,
+        top: 12,
+        child: _latencyBadge(
+          '延迟调试：等待敲击样本…',
+          Colors.blueGrey,
+        ),
+      );
+    }
+
+    final total = metrics.lastClientTotalMs;
+    final color = metrics.meetsPrdTarget ? Colors.green : Colors.orange;
+    return Positioned(
+      left: 12,
+      top: 12,
+      child: _latencyBadge(
+        '传输 ${metrics.lastTransportMs ?? '-'}ms · '
+        '音频 ${metrics.lastStrikeToAudioMs ?? '-'}ms · '
+        '合计 ${total ?? '-'}ms · '
+        'WS RTT ${metrics.lastWsRttMs ?? '-'}ms',
+        color,
+      ),
+    );
+  }
+
+  Widget _latencyBadge(String text, Color color) {
+    return Material(
+      color: color.withValues(alpha: 0.88),
+      borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        child: Text(
+          text,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _DemoModeActions extends StatelessWidget {
   const _DemoModeActions();
 
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
-    if (!provider.demoModeEnabled ||
-        provider.demoMode != DemoMode.performing) {
+    if (!provider.demoModeEnabled) {
       return const SizedBox.shrink();
     }
+
+    if (provider.demoMode == DemoMode.standby) {
+      return const SizedBox.shrink();
+    }
+
+    final isPaused = provider.isDemoPaused;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        IconButton(
+          tooltip: isPaused ? '继续演示' : '暂停演示',
+          icon: Icon(isPaused ? Icons.play_arrow : Icons.pause),
+          onPressed: isPaused ? provider.resumeDemoMode : provider.pauseDemoMode,
+        ),
         IconButton(
           tooltip: '返回待机',
           icon: const Icon(Icons.slideshow),
@@ -221,11 +333,16 @@ class _ModeButtons extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
+    final hideNinja = provider.inputMode == InputMode.touchOnly ||
+        (provider.inputMode == InputMode.vision && provider.demoModeEnabled);
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _NinjaButton(provider: provider),
-        const SizedBox(width: 6),
+        if (!hideNinja) ...[
+          _NinjaButton(provider: provider),
+          const SizedBox(width: 6),
+        ],
         _FollowAlongButton(provider: provider),
       ],
     );

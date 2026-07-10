@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
 
+import 'calibration_mapping.dart';
 import 'constants.dart';
 import 'stage_layout_config.dart';
 import '../models/sensor_data.dart';
@@ -40,6 +41,7 @@ class _StageBellLayoutConfig {
   final double x;
   final double y;
   final bool isUpper;
+  final BellRole role;
   final double visualScale;
 
   const _StageBellLayoutConfig({
@@ -47,6 +49,7 @@ class _StageBellLayoutConfig {
     required this.x,
     required this.y,
     required this.isUpper,
+    required this.role,
     required this.visualScale,
   });
 
@@ -56,6 +59,7 @@ class _StageBellLayoutConfig {
       x: layout.x,
       y: layout.y,
       isUpper: layout.isUpper,
+      role: layout.role,
       visualScale: layout.visualScale,
     );
   }
@@ -241,10 +245,11 @@ class StageHitMapper {
         required Rect rect,
         required StageStrikeRegion region,
       }) {
-        if (!path.contains(point)) {
+        final adjusted = CalibrationMapping.adjustPointForBell(bellId, point);
+        if (!path.contains(adjusted)) {
           return;
         }
-        final distance = (point - rect.center).distance;
+        final distance = (adjusted - rect.center).distance;
         if (distance < bestDistance) {
           bestDistance = distance;
           bestMatch = StageStrikeHitResult(
@@ -373,7 +378,8 @@ class StageHitMapper {
   }
 
   static _StageBellGeometry _resolveBellGeometry(_StageBellLayoutConfig bell) {
-    final scale = (bell.isUpper ? 0.95 : 1.00) * bell.visualScale;
+    final roleScale = bell.role == BellRole.primary ? 1.05 : 0.88;
+    final scale = roleScale * bell.visualScale;
     final width = _stageBellWidthRatio * scale;
     final height = _stageBellHeightRatio * scale;
     final bellTop = bell.y - height / 2;

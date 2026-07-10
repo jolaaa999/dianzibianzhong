@@ -53,6 +53,22 @@ class VisionStickFrame {
     );
   }
 
+  VisionStickFrame copyWith({
+    double? x,
+    double? y,
+    double? confidence,
+    bool? isVisible,
+  }) {
+    return VisionStickFrame(
+      stickId: stickId,
+      x: x ?? this.x,
+      y: y ?? this.y,
+      confidence: confidence ?? this.confidence,
+      timestamp: timestamp,
+      isVisible: isVisible ?? this.isVisible,
+    );
+  }
+
   Map<String, dynamic> toJson() => {
     'type': 'stick_frame',
     'stick_id': stickId,

@@ -6,10 +6,13 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/app_demo_mode.dart';
+import '../models/latency_metrics.dart';
+import '../models/latency_sample.dart';
 import '../models/sensor_data.dart';
 import '../models/song_model.dart';
 import '../models/song_library.dart';
 import '../models/vision_stick_frame.dart';
+import '../models/vision_tracker_status.dart';
 import '../services/audio_service.dart';
 import '../services/ble_provisioning_service.dart';
 import '../services/udp_hammer_service.dart';
@@ -18,6 +21,9 @@ import '../services/wifi_info_service.dart';
 import '../services/websocket_service.dart';
 import '../utils/constants.dart';
 import '../utils/hammer_pose_mapper.dart';
+import '../utils/latency_csv_exporter.dart';
+import '../utils/calibration_mapping.dart';
+import '../utils/calibration_wizard_store.dart';
 import '../utils/stage_hit_mapper.dart';
 import '../utils/blade_trail.dart';
 import '../utils/slash_detector.dart';
@@ -73,6 +79,12 @@ class AppProvider with ChangeNotifier {
   double _sensitivity = AppConstants.defaultSensitivity;
   bool _audioEnabled = true;
   bool _reverbEnabled = true;
+  int _reverbDelayMs = AppConstants.audioReverbDelay.inMilliseconds;
+  double _reverbWetMix = AppConstants.audioReverbWetMix;
+  int _reverbMinVoices = AppConstants.audioReverbMinVoices;
+  LatencyMetrics _latencyMetrics = const LatencyMetrics();
+  final List<LatencySample> _latencyHistory = [];
+  VisionTrackerStatus? _visionTrackerStatus;
   bool _isDisposed = false;
   DateTime? _lastStageRefreshAt;
   Timer? _stageRefreshTimer;
@@ -94,6 +106,7 @@ class AppProvider with ChangeNotifier {
   Timer? _demoModeTimer;
   bool _debugShowHitBoxes = false;
   bool _calibrationCompleted = false;
+  bool _visionWasConnected = false;
   late final Future<void> _settingsLoadedFuture;
 
   ConnectionStatus get connectionStatus => _connectionStatus;
@@ -108,6 +121,13 @@ class AppProvider with ChangeNotifier {
   double get sensitivity => _sensitivity;
   bool get audioEnabled => _audioEnabled;
   bool get reverbEnabled => _reverbEnabled;
+  int get reverbDelayMs => _reverbDelayMs;
+  double get reverbWetMix => _reverbWetMix;
+  int get reverbMinVoices => _reverbMinVoices;
+  LatencyMetrics get latencyMetrics => _latencyMetrics;
+  List<LatencySample> get latencyHistory =>
+      List.unmodifiable(_latencyHistory);
+  VisionTrackerStatus? get visionTrackerStatus => _visionTrackerStatus;
   bool get isConnected => _connectionStatus.isConnected;
   bool get isMonitoringHardware => _udpListening;
   bool get isBleScanning => _isBleScanning;
@@ -177,6 +197,10 @@ class AppProvider with ChangeNotifier {
       Map.unmodifiable(_stickFramesById);
   DemoMode get demoMode => _demoMode;
   bool get demoModeEnabled => _demoModeEnabled;
+  bool get isDemoPaused => _demoMode == DemoMode.paused;
+  bool get allowHardwareInput =>
+      _inputMode != InputMode.touchOnly && !isDemoPaused;
+  bool get allowTouchInput => !isDemoPaused;
   bool get debugShowHitBoxes => _debugShowHitBoxes;
   bool get calibrationCompleted => _calibrationCompleted;
   Future<void> get settingsLoaded => _settingsLoadedFuture;
@@ -385,13 +409,24 @@ class AppProvider with ChangeNotifier {
       _visionWsUrl =
           prefs.getString('vision_ws_url') ?? AppConstants.defaultVisionWsUrl;
       _reverbEnabled = prefs.getBool('audio_reverb_enabled') ?? true;
+      _reverbDelayMs =
+          prefs.getInt('audio_reverb_delay_ms') ??
+          AppConstants.audioReverbDelay.inMilliseconds;
+      _reverbWetMix =
+          prefs.getDouble('audio_reverb_wet_mix') ??
+          AppConstants.audioReverbWetMix;
+      _reverbMinVoices =
+          prefs.getInt('audio_reverb_min_voices') ??
+          AppConstants.audioReverbMinVoices;
       _audioService.setReverbEnabled(_reverbEnabled);
+      _applyReverbConfig();
       _visionStrikeDetector.minStrikeSpeed =
           prefs.getDouble('vision_min_strike_speed') ??
           AppConstants.visionMinStrikeSpeed;
       _visionStrikeDetector.hoverSpeedThreshold =
           prefs.getDouble('vision_hover_speed_threshold') ??
           AppConstants.visionHoverSpeedThreshold;
+      await CalibrationMapping.load();
     } catch (_) {}
   }
 
@@ -399,6 +434,8 @@ class AppProvider with ChangeNotifier {
     _calibrationCompleted = true;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('calibration_completed', true);
+    await CalibrationMapping.save();
+    await CalibrationWizardStore.clear();
     _notifySafely();
   }
 
@@ -406,7 +443,15 @@ class AppProvider with ChangeNotifier {
     _calibrationCompleted = false;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('calibration_completed', false);
+    await CalibrationMapping.clearPersisted();
+    await CalibrationWizardStore.clear();
     _notifySafely();
+  }
+
+  Future<void> _handleVisionHardwareDisconnect() async {
+    if (!_calibrationCompleted || _inputMode != InputMode.vision) return;
+    _errorMessage = '摄像头连接变化，请重新校准';
+    await resetCalibration();
   }
 
   Future<void> setDebugShowHitBoxes(bool value) async {
@@ -423,6 +468,52 @@ class AppProvider with ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('audio_reverb_enabled', value);
     _notifySafely();
+  }
+
+  Future<void> setReverbDelayMs(int value) async {
+    _reverbDelayMs = value.clamp(20, 200);
+    _applyReverbConfig();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('audio_reverb_delay_ms', _reverbDelayMs);
+    _notifySafely();
+  }
+
+  Future<void> setReverbWetMix(double value) async {
+    _reverbWetMix = value.clamp(0.05, 0.6);
+    _applyReverbConfig();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('audio_reverb_wet_mix', _reverbWetMix);
+    _notifySafely();
+  }
+
+  Future<void> setReverbMinVoices(int value) async {
+    _reverbMinVoices = value.clamp(2, 8);
+    _applyReverbConfig();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('audio_reverb_min_voices', _reverbMinVoices);
+    _notifySafely();
+  }
+
+  void _applyReverbConfig() {
+    _audioService.configureReverb(
+      delay: Duration(milliseconds: _reverbDelayMs),
+      wetMix: _reverbWetMix,
+      minVoices: _reverbMinVoices,
+    );
+  }
+
+  void resetLatencyMetrics() {
+    _latencyMetrics = const LatencyMetrics();
+    _latencyHistory.clear();
+    _notifySafely();
+  }
+
+  Future<String?> exportLatencyCsv() async {
+    return LatencyCsvExporter.writeToDownloads(_latencyHistory);
+  }
+
+  void setVisionThreshold(int threshold) {
+    _visionService.setThreshold(threshold);
   }
 
   Future<void> setVisionMinStrikeSpeed(double value) async {
@@ -457,6 +548,20 @@ class AppProvider with ChangeNotifier {
 
   void enterPerformingMode() {
     if (_demoMode == DemoMode.performing) return;
+    _demoMode = DemoMode.performing;
+    _lastStrikeAt = DateTime.now();
+    _notifySafely();
+  }
+
+  void pauseDemoMode() {
+    if (_demoMode != DemoMode.performing) return;
+    _demoMode = DemoMode.paused;
+    unawaited(_audioService.stopAll());
+    _notifySafely();
+  }
+
+  void resumeDemoMode() {
+    if (_demoMode != DemoMode.paused) return;
     _demoMode = DemoMode.performing;
     _lastStrikeAt = DateTime.now();
     _notifySafely();
@@ -556,6 +661,10 @@ class AppProvider with ChangeNotifier {
     _notifySafely();
   }
 
+  void requestVisionThresholdRecalibration() {
+    _visionService.requestThresholdRecalibration();
+  }
+
   void _initializeBellStates() {
     for (int i = 1; i <= AppConstants.bellCount; i++) {
       _bellStates[i] = false;
@@ -606,14 +715,23 @@ class AppProvider with ChangeNotifier {
 
     _subscriptions.add(
       _visionService.statusStream.listen((status) {
+        final previousStatus = _visionStatus;
         _visionStatus = status;
         if (status == ConnectionStatus.error) {
           _errorMessage = '视觉追踪连接失败';
         } else if (status == ConnectionStatus.connected) {
+          _visionWasConnected = true;
           if (_errorMessage == '视觉追踪连接失败' ||
               _errorMessage == '追踪信号丢失') {
             _errorMessage = '';
           }
+        }
+        if (_inputMode == InputMode.vision &&
+            _calibrationCompleted &&
+            previousStatus == ConnectionStatus.connected &&
+            (status == ConnectionStatus.disconnected ||
+                status == ConnectionStatus.error)) {
+          unawaited(_handleVisionHardwareDisconnect());
         }
         _refreshConnectionState();
         _notifySafely();
@@ -623,11 +741,24 @@ class AppProvider with ChangeNotifier {
     _subscriptions.add(
       _visionService.frameStream.listen(_handleVisionFrame),
     );
+    _subscriptions.add(
+      _visionService.rttStream.listen((rttMs) {
+        _latencyMetrics = _latencyMetrics.withWsRtt(rttMs);
+        _notifySafely();
+      }),
+    );
+    _subscriptions.add(
+      _visionService.trackerStatusStream.listen((status) {
+        _visionTrackerStatus = status;
+        _notifySafely();
+      }),
+    );
   }
 
   void _handleVisionFrame(VisionStickFrame frame) {
     if (_inputMode != InputMode.vision) return;
 
+    final receivedAt = DateTime.now();
     _messageCount++;
     _stickFramesById[frame.stickId] = frame;
 
@@ -636,20 +767,42 @@ class AppProvider with ChangeNotifier {
       return;
     }
 
-    _checkStickInteractionZone(frame);
+    if (!isDemoPaused) {
+      _checkStickInteractionZone(frame);
+    }
+
+    final point = Offset(frame.x, frame.y);
+
+    if (_ninjaMode && !isDemoPaused) {
+      _processVisionNinjaTrail(
+        stickId: frame.stickId,
+        point: point,
+        timestamp: receivedAt,
+      );
+    }
+
+    if (isDemoPaused) {
+      _requestStageRefresh(immediate: true);
+      return;
+    }
 
     final hits = _visionStrikeDetector.update(
       stickId: frame.stickId,
-      point: Offset(frame.x, frame.y),
+      point: point,
       timestamp: frame.timestamp,
       currentOctave: _currentOctave,
     );
 
     for (final hit in hits) {
+      final transportMs = receivedAt
+          .difference(frame.timestamp)
+          .inMilliseconds
+          .clamp(0, 5000);
       _handleStrike(
         hit.intensity,
         bellId: hit.bellId,
         region: hit.region,
+        transportMs: transportMs,
       );
       _visionService.sendStrikeAck(
         bellId: hit.bellId,
@@ -657,7 +810,32 @@ class AppProvider with ChangeNotifier {
       );
     }
 
-    _requestStageRefresh(immediate: hits.isNotEmpty);
+    _requestStageRefresh(immediate: hits.isNotEmpty || _ninjaMode);
+  }
+
+  void _processVisionNinjaTrail({
+    required int stickId,
+    required Offset point,
+    required DateTime timestamp,
+  }) {
+    final key = 'stick_$stickId';
+    final trail = _bladeTrailsByDeviceId.putIfAbsent(key, BladeTrail.new);
+    final speed = _visionStrikeDetector.currentSpeedForStick(stickId) ?? 0;
+    final isSlashing = speed >= AppConstants.visionMinStrikeSpeed * 0.85;
+    trail.addPoint(point, timestamp, isSlashing);
+
+    if (!isSlashing) return;
+
+    final segments = trail.getActiveSegments();
+    final trailHits = StageHitMapper.hitTestTrailSegments(
+      currentOctave: _currentOctave,
+      segments: segments
+          .map((s) => (start: s.start, end: s.end, isSlashing: s.isSlashing))
+          .toList(),
+    );
+    for (final hit in trailHits) {
+      _handleStrike(0.75, bellId: hit.bellId, region: hit.region);
+    }
   }
 
   /// 启动 UDP 硬件监听
@@ -860,6 +1038,7 @@ class AppProvider with ChangeNotifier {
     if (_inputMode == InputMode.vision || _inputMode == InputMode.touchOnly) {
       return;
     }
+    if (isDemoPaused) return;
     _messageCount++;
     final incomingOctave = message.octave?.clamp(
       AppConstants.minOctave,
@@ -1032,7 +1211,9 @@ class AppProvider with ChangeNotifier {
     double intensity, {
     int? bellId,
     StageStrikeRegion region = StageStrikeRegion.center,
+    int? transportMs,
   }) {
+    if (isDemoPaused) return;
     _onAnyStrike();
     final baseBellId = bellId ?? _resolveBellIdForLatestSensor();
     final resolvedBellId = _resolveBellIdForRegion(baseBellId, region);
@@ -1041,7 +1222,27 @@ class AppProvider with ChangeNotifier {
     _checkFollowAlongHit(baseBellId);
 
     if (_audioEnabled) {
-      _audioService.playBell(resolvedBellId, intensity);
+      unawaited(
+        _audioService.playBell(resolvedBellId, intensity).then((strikeToAudioMs) {
+          if (transportMs == null) return;
+          var metrics = _latencyMetrics.recordStrike(
+            transportMs: transportMs,
+            strikeToAudioMs: strikeToAudioMs,
+          );
+          final rtt = _visionService.lastRttMs;
+          if (rtt != null) {
+            metrics = metrics.withWsRtt(rtt);
+          }
+          _latencyMetrics = metrics;
+          _appendLatencySample(
+            transportMs: transportMs,
+            strikeToAudioMs: strikeToAudioMs,
+            bellId: baseBellId,
+            wsRttMs: rtt,
+          );
+          _notifySafely();
+        }),
+      );
     }
 
     _bellStates[baseBellId] = true;
@@ -1058,6 +1259,27 @@ class AppProvider with ChangeNotifier {
     debugPrint(
       '敲击编钟 base=$baseBellId play=$resolvedBellId region=$region，强度: ${intensity.toStringAsFixed(2)}',
     );
+  }
+
+  void _appendLatencySample({
+    required int transportMs,
+    required int strikeToAudioMs,
+    required int bellId,
+    int? wsRttMs,
+  }) {
+    _latencyHistory.add(
+      LatencySample(
+        recordedAt: DateTime.now(),
+        transportMs: transportMs,
+        strikeToAudioMs: strikeToAudioMs,
+        totalMs: transportMs + strikeToAudioMs,
+        wsRttMs: wsRttMs,
+        bellId: bellId,
+      ),
+    );
+    while (_latencyHistory.length > LatencyCsvExporter.maxHistory) {
+      _latencyHistory.removeAt(0);
+    }
   }
 
   bool _shouldAcceptUdpStrike(
@@ -1223,6 +1445,7 @@ class AppProvider with ChangeNotifier {
     double intensity, {
     StageStrikeRegion region = StageStrikeRegion.center,
   }) {
+    if (!allowTouchInput) return;
     _onAnyStrike();
     _checkFollowAlongHit(bellId);
     final resolvedBellId = _resolveBellIdForRegion(bellId, region);
@@ -1279,6 +1502,18 @@ class AppProvider with ChangeNotifier {
 
   void setSensitivity(double sensitivity) {
     _sensitivity = sensitivity.clamp(0.0, 1.0);
+    _notifySafely();
+  }
+
+  List<BellAssetAuditEntry> auditBellAssets() => BellMapping.auditAllBells();
+
+  void setBellAssetOverride(int bellId, String assetFileName) {
+    _audioService.setBellAssetOverride(bellId, assetFileName);
+    _notifySafely();
+  }
+
+  void clearBellAssetOverrides() {
+    _audioService.clearAllBellAssetOverrides();
     _notifySafely();
   }
 

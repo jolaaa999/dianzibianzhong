@@ -2,12 +2,14 @@
 enum DemoMode {
   standby,
   performing,
+  paused,
 }
 
 extension DemoModeExtension on DemoMode {
   String get displayName => switch (this) {
     DemoMode.standby => '待机',
     DemoMode.performing => '演奏',
+    DemoMode.paused => '暂停',
   };
 }
 

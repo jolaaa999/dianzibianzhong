@@ -121,6 +121,22 @@ class _StandbyScreenState extends State<StandbyScreen>
                     ),
                   ),
                 ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    context.read<AppProvider>().enterPerformingMode();
+                  },
+                  icon: const Icon(Icons.admin_panel_settings),
+                  label: const Text('工作人员开始演示'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.amber[200],
+                    side: BorderSide(color: Colors.amber[700]!),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 14,
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 48),
               ],
             ),

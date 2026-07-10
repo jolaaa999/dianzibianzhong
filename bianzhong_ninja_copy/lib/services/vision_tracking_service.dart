@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:developer' as developer;
 
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../models/sensor_data.dart';
+import '../models/vision_tracker_status.dart';
 import '../models/vision_stick_frame.dart';
 import '../utils/constants.dart';
 
@@ -20,7 +22,21 @@ class VisionTrackingService {
   DateTime? _lastFrameAt;
   final Map<int, VisionStickFrame> _lastFrames = {};
   final Map<int, DateTime> _lastReceivedAtByStickId = {};
+  final Map<int, DateTime> _staleSinceByStickId = {};
   Timer? _stickStaleTimer;
+  Timer? _pingTimer;
+  DateTime? _lastPingSentAt;
+  int? _lastRttMs;
+  VisionTrackerStatus? _trackerStatus;
+  final StreamController<int> _rttController = StreamController<int>.broadcast();
+  final StreamController<VisionTrackerStatus> _trackerStatusController =
+      StreamController<VisionTrackerStatus>.broadcast();
+
+  Stream<int> get rttStream => _rttController.stream;
+  Stream<VisionTrackerStatus> get trackerStatusStream =>
+      _trackerStatusController.stream;
+  int? get lastRttMs => _lastRttMs;
+  VisionTrackerStatus? get trackerStatus => _trackerStatus;
 
   Stream<VisionStickFrame> get frameStream =>
       _frameController?.stream ?? const Stream.empty();
@@ -69,6 +85,7 @@ class VisionTrackingService {
       _lastFrameAt = DateTime.now();
       _startFrameTimeoutWatch();
       _startStickStaleWatch();
+      _startPingLoop();
 
       _channel!.stream.listen(
         _onMessage,
@@ -84,13 +101,56 @@ class VisionTrackingService {
   }
 
   void _onMessage(dynamic data) {
+    try {
+      final parsed = jsonDecode(data.toString());
+      if (parsed is Map<String, dynamic>) {
+        final type = parsed['type'] as String?;
+        if (type == 'pong' && _lastPingSentAt != null) {
+          _lastRttMs =
+              DateTime.now().difference(_lastPingSentAt!).inMilliseconds;
+          _rttController.add(_lastRttMs!);
+          return;
+        }
+        if (type == 'tracker_status') {
+          _trackerStatus = VisionTrackerStatus.fromJson(parsed);
+          _trackerStatusController.add(_trackerStatus!);
+          return;
+        }
+        if (type == 'calibration_started' || type == 'calibration_complete') {
+          _trackerStatus = VisionTrackerStatus(
+            threshold: (parsed['threshold'] as num?)?.toInt() ??
+                _trackerStatus?.threshold ??
+                220,
+            calibrating: type == 'calibration_started',
+            calibrationProgress: type == 'calibration_complete' ? 1.0 : 0.0,
+            updatedAt: DateTime.now(),
+          );
+          _trackerStatusController.add(_trackerStatus!);
+          return;
+        }
+      }
+    } catch (_) {}
+
     final frame = VisionStickFrame.tryParse(data.toString());
     if (frame == null) return;
 
     _lastFrameAt = DateTime.now();
     _lastReceivedAtByStickId[frame.stickId] = _lastFrameAt!;
+    _staleSinceByStickId.remove(frame.stickId);
     _lastFrames[frame.stickId] = frame;
     _frameController?.add(frame);
+  }
+
+  void _startPingLoop() {
+    _pingTimer?.cancel();
+    _pingTimer = Timer.periodic(AppConstants.heartbeatInterval, (_) {
+      sendPing();
+    });
+  }
+
+  void _stopPingLoop() {
+    _pingTimer?.cancel();
+    _pingTimer = null;
   }
 
   void _startStickStaleWatch() {
@@ -114,12 +174,31 @@ class VisionTrackingService {
       final current = _lastFrames[stickId];
       final isStale = receivedAt == null ||
           now.difference(receivedAt) > AppConstants.visionStickStaleTimeout;
-      if (!isStale || current?.isVisible == false) {
+
+      if (!isStale) {
+        _staleSinceByStickId.remove(stickId);
         continue;
       }
-      final lost = VisionStickFrame.lost(stickId: stickId);
-      _lastFrames[stickId] = lost;
-      _frameController?.add(lost);
+
+      _staleSinceByStickId.putIfAbsent(stickId, () => now);
+      final staleAge = now.difference(_staleSinceByStickId[stickId]!);
+
+      if (current != null &&
+          current.isVisible &&
+          staleAge < AppConstants.visionPredictionHold) {
+        final decay = 1.0 - staleAge.inMilliseconds /
+            AppConstants.visionPredictionHold.inMilliseconds;
+        _frameController?.add(
+          current.copyWith(confidence: current.confidence * decay),
+        );
+        continue;
+      }
+
+      if (current?.isVisible != false) {
+        final lost = VisionStickFrame.lost(stickId: stickId);
+        _lastFrames[stickId] = lost;
+        _frameController?.add(lost);
+      }
     }
   }
 
@@ -134,6 +213,7 @@ class VisionTrackingService {
     _updateStatus(ConnectionStatus.disconnected);
     _stopFrameTimeoutWatch();
     _stopStickStaleWatch();
+    _stopPingLoop();
     _scheduleReconnect();
   }
 
@@ -182,17 +262,44 @@ class VisionTrackingService {
     } catch (_) {}
   }
 
+  void requestThresholdRecalibration() {
+    if (!isConnected) return;
+    try {
+      _channel?.sink.add('{"type":"recalibrate_threshold"}');
+    } catch (_) {}
+  }
+
+  void setThreshold(int threshold) {
+    if (!isConnected) return;
+    final safe = threshold.clamp(160, 245);
+    try {
+      _channel?.sink.add('{"type":"set_threshold","threshold":$safe}');
+    } catch (_) {}
+  }
+
+  void sendPing() {
+    if (!isConnected) return;
+    try {
+      _lastPingSentAt = DateTime.now();
+      _channel?.sink.add(
+        '{"type":"ping","timestamp":${_lastPingSentAt!.millisecondsSinceEpoch}}',
+      );
+    } catch (_) {}
+  }
+
   Future<void> disconnect() async {
     _shouldReconnect = false;
     _reconnectTimer?.cancel();
     _stopFrameTimeoutWatch();
     _stopStickStaleWatch();
+    _stopPingLoop();
     try {
       await _channel?.sink.close(1000);
       _channel = null;
     } catch (_) {}
     _lastFrames.clear();
     _lastReceivedAtByStickId.clear();
+    _trackerStatus = null;
     _updateStatus(ConnectionStatus.disconnected);
   }
 
@@ -200,6 +307,8 @@ class VisionTrackingService {
     disconnect();
     _frameController?.close();
     _statusController?.close();
+    _rttController.close();
+    _trackerStatusController.close();
     _frameController = null;
     _statusController = null;
   }

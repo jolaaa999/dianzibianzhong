@@ -19,6 +19,11 @@ const double _stageUpperBeamTopInsetRatio = -0.070;
 const double _stageLowerBeamTopInsetRatio = -0.086;
 const double _stageBeamHeightRatio = 0.064;
 
+double _bellVisualScale(StageBellLayout bell) {
+  final roleScale = bell.isPrimary ? 1.10 : 0.88;
+  return roleScale * bell.visualScale;
+}
+
 class _BianzhongRackPainter extends CustomPainter {
   const _BianzhongRackPainter();
 
@@ -69,6 +74,7 @@ class _BianzhongRackPainter extends CustomPainter {
 
 class _BianzhongBellPainter extends CustomPainter {
   final bool isActive;
+  final bool isPrimary;
   final Set<StageStrikeRegion>? highlightedRegions;
   final bool isFollowCurrent;
   final int notePulse;
@@ -77,6 +83,7 @@ class _BianzhongBellPainter extends CustomPainter {
 
   const _BianzhongBellPainter({
     required this.isActive,
+    this.isPrimary = true,
     required this.highlightedRegions,
     this.isFollowCurrent = false,
     this.notePulse = 0,
@@ -129,10 +136,16 @@ class _BianzhongBellPainter extends CustomPainter {
                 Color(0xffcb8f46),
                 Color(0xff7f4b24),
               ]
-            : const [
+            : isPrimary
+            ? const [
                 Color(0xffb08658),
                 Color(0xff7b5330),
                 Color(0xff35221b),
+              ]
+            : const [
+                Color(0xff9a7650),
+                Color(0xff6a4528),
+                Color(0xff2d1c16),
               ],
       ).createShader(bellRect);
     canvas.drawPath(body, bodyPaint);
@@ -614,7 +627,7 @@ class _DebugHitBoxPainter extends CustomPainter {
     for (final bell in StageBellLayout.bells) {
       final bellId = BellMapping.getBellId(currentOctave, bell.note);
       if (bellId == null) continue;
-      final scale = (bell.isUpper ? 0.95 : 1.00) * bell.visualScale;
+      final scale = _bellVisualScale(bell);
       final width = 0.124 * scale;
       final height = 0.34 * scale;
       final bellTop = bell.y - height / 2;
@@ -1126,13 +1139,11 @@ class _StageBianzhongViewState extends State<StageBianzhongView>
       return const SizedBox.shrink();
     }
 
-    final upperScale = bell.isUpper ? 0.94 : 1.10;
-    final scale = upperScale * bell.visualScale;
+    final scale = _bellVisualScale(bell);
     final width = size.width * _stageBellWidthRatio * scale;
     final height = size.height * _stageBellHeightRatio * scale;
     final centerX = bell.x * size.width;
-    final top = size.height *
-        (bell.isUpper ? _stageUpperRowTopRatio : _stageLowerRowTopRatio);
+    final top = bell.y * size.height - height * 0.46;
     final isActive =
         widget.activeBellIds.contains(bellId) || bellId == widget.lastStrikeBellId;
     final isFollowCurrent = widget.followAlongCurrentBellId == bellId;
@@ -1155,6 +1166,7 @@ class _StageBianzhongViewState extends State<StageBianzhongView>
               child: CustomPaint(
                 painter: _BianzhongBellPainter(
                   isActive: isActive,
+                  isPrimary: bell.isPrimary,
                   highlightedRegions: highlightedRegions,
                   isFollowCurrent: isFollowCurrent,
                   notePulse: isFollowCurrent ? widget.followAlongNotePulse : 0,
@@ -1229,16 +1241,15 @@ class _StageBianzhongViewState extends State<StageBianzhongView>
     for (final bell in StageBellLayout.bells) {
       final bellId = BellMapping.getBellId(widget.currentOctave, bell.note);
       if (bellId != hit.bellId) continue;
-      final upperScale = bell.isUpper ? 0.94 : 1.10;
-      final scale = upperScale * bell.visualScale;
+      final scale = _bellVisualScale(bell);
       final width = size.width * _stageBellWidthRatio * scale;
       final height = size.height * _stageBellHeightRatio * scale;
       final centerX = bell.x * size.width;
-      final top = size.height *
-          (bell.isUpper ? _stageUpperRowTopRatio : _stageLowerRowTopRatio);
+      final centerY = bell.y * size.height;
+      final ringTop = centerY - height * 0.46 - 6;
       return Positioned(
         left: centerX - width / 2 - 6,
-        top: top - 6,
+        top: ringTop,
         width: width + 12,
         height: height + 12,
         child: IgnorePointer(
@@ -1373,12 +1384,10 @@ class _StageBianzhongViewState extends State<StageBianzhongView>
         continue;
       }
 
-      final upperScale = bell.isUpper ? 0.94 : 1.10;
-      final scale = upperScale * bell.visualScale;
+      final scale = _bellVisualScale(bell);
       final width = size.width * _stageBellWidthRatio * scale;
       final height = size.height * _stageBellHeightRatio * scale;
-      final bellTop = size.height *
-          (bell.isUpper ? _stageUpperRowTopRatio : _stageLowerRowTopRatio);
+      final bellTop = bell.y * size.height - height * 0.46;
       final bellLeft = bell.x * size.width - width / 2;
       final paintHeight = height * _stageBellPaintHeightFactor;
       final shellRect = Rect.fromLTWH(
