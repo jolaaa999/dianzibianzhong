@@ -1,0 +1,126 @@
+Command: C:\Espressif\tools\python\v5.5.4\venv\Scripts\python.exe D:\esp-idf\.espressif\v5.5.4\esp-idf\tools/idf_monitor.py -p COM11 -b 115200 --toolchain-prefix xtensa-esp32s3-elf- --target esp32s3 --revision 0 D:\txw_uni\programmingproject\enterprise\20260710_bianzhong\bianzhong_hammer_uart_shtp\build\bianzhong_hammer_uart_shtp.elf D:\txw_uni\programmingproject\enterprise\20260710_bianzhong\bianzhong_hammer_uart_shtp\build\bootloader\bootloader.elf --force-color -m 'C:\Espressif\tools\python\v5.5.4\venv\Scripts\python.exe' 'D:\esp-idf\.espressif\v5.5.4\esp-idf\tools\idf.py' '-p' 'COM11'
+ESP-ROM:esp32s3-20210327
+Build:Mar 27 2021
+rst:0x1 (POWERON),boot:0x2b (SPI_FAST_FLASH_BOOT)
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fce2820,len:0x14f0
+load:0x403c8700,len:0xd24
+load:0x403cb700,len:0x2ef0
+entry 0x403c8924
+[0;32mI (24) boot: ESP-IDF v5.5.4 2nd stage bootloader[0m
+[0;32mI (25) boot: compile time Jul 10 2026 22:19:49[0m
+[0;32mI (25) boot: Multicore bootloader[0m
+[0;32mI (25) boot: chip revision: v0.2[0m
+[0;32mI (28) boot: efuse block revision: v1.3[0m
+[0;32mI (31) boot.esp32s3: Boot SPI Speed : 80MHz[0m
+[0;32mI (35) boot.esp32s3: SPI Mode       : DIO[0m
+[0;32mI (39) boot.esp32s3: SPI Flash Size : 8MB[0m
+[0;32mI (43) boot: Enabling RNG early entropy source...[0m
+[0;32mI (47) boot: Partition Table:[0m
+[0;32mI (50) boot: ## Label            Usage          Type ST Offset   Length[0m
+[0;32mI (56) boot:  0 nvs              WiFi data        01 02 00009000 00006000[0m
+[0;32mI (63) boot:  1 otadata          OTA data         01 00 0000f000 00002000[0m
+[0;32mI (69) boot:  2 phy_init         RF data          01 01 00011000 00001000[0m
+[0;32mI (76) boot:  3 factory          factory app      00 00 00020000 00200000[0m
+[0;32mI (82) boot: End of partition table[0m
+[0;32mI (85) boot: Defaulting to factory image[0m
+[0;32mI (89) esp_image: segment 0: paddr=00020020 vaddr=3c090020 size=207e0h (133088) map[0m
+[0;32mI (120) esp_image: segment 1: paddr=00040808 vaddr=3fc99800 size=04ea0h ( 20128) load[0m
+[0;32mI (124) esp_image: segment 2: paddr=000456b0 vaddr=40374000 size=0a968h ( 43368) load[0m
+[0;32mI (134) esp_image: segment 3: paddr=00050020 vaddr=42000020 size=8e450h (582736) map[0m
+[0;32mI (237) esp_image: segment 4: paddr=000de478 vaddr=4037e968 size=0ae54h ( 44628) load[0m
+[0;32mI (247) esp_image: segment 5: paddr=000e92d4 vaddr=50000000 size=00020h (    32) load[0m
+[0;32mI (256) boot: Loaded app from partition at offset 0x20000[0m
+[0;32mI (256) boot: Disabling RNG early entropy source...[0m
+[0;32mI (266) cpu_start: Multicore app[0m
+[0;32mI (275) cpu_start: GPIO 44 and 43 are used as console UART I/O pins[0m
+[0;32mI (275) cpu_start: Pro cpu start user code[0m
+[0;32mI (275) cpu_start: cpu freq: 160000000 Hz[0m
+[0;32mI (277) app_init: Application information:[0m
+[0;32mI (281) app_init: Project name:     bianzhong_hammer_uart_shtp[0m
+[0;32mI (286) app_init: App version:      1[0m
+[0;32mI (290) app_init: Compile time:     Jul 10 2026 22:17:08[0m
+[0;32mI (295) app_init: ELF file SHA256:  85e73f2b6...[0m
+[0;32mI (299) app_init: ESP-IDF:          v5.5.4[0m
+[0;32mI (303) efuse_init: Min chip rev:     v0.0[0m
+[0;32mI (307) efuse_init: Max chip rev:     v0.99 [0m
+[0;32mI (311) efuse_init: Chip rev:         v0.2[0m
+[0;32mI (315) heap_init: Initializing. RAM available for dynamic allocation:[0m
+[0;32mI (321) heap_init: At 3FCA4100 len 00045610 (277 KiB): RAM[0m
+[0;32mI (326) heap_init: At 3FCE9710 len 00005724 (21 KiB): RAM[0m
+[0;32mI (331) heap_init: At 3FCF0000 len 00008000 (32 KiB): DRAM[0m
+[0;32mI (336) heap_init: At 600FE000 len 00001FE8 (7 KiB): RTCRAM[0m
+[0;32mI (343) spi_flash: detected chip: boya[0m
+[0;32mI (345) spi_flash: flash io: dio[0m
+[0;33mW (348) spi_flash: Detected size(16384k) larger than the size in the binary image header(8192k). Using the size in the binary image header.[0m
+[0;33mW (360) i2c: This driver is an old driver, please migrate your application code to adapt `driver/i2c_master.h`[0m
+[0;32mI (370) sleep_gpio: Configure to isolate all GPIO pins in sleep state[0m
+[0;32mI (377) sleep_gpio: Enable automatic switching of GPIO sleep configuration[0m
+[0;32mI (383) coexist: coex firmware version: 093e3d2[0m
+[0;32mI (387) coexist: coexist rom version e7ae62f[0m
+[0;32mI (392) main_task: Started on CPU0[0m
+[0;32mI (402) main_task: Calling app_main()[0m
+[0;32mI (402) bno085_link: Reconfigured task watchdog for motion test (idle cores unsubscribed)[0m
+[0;32mI (402) bno085_link: Initializing WiFi provisioning...[0m
+[0;32mI (432) bno085_link: Using default SSID: Bianzhong_Stage[0m
+[0;32mI (432) bno085_link: Using default password[0m
+[0;32mI (432) bno085_link: Loaded Hammer ID from NVS: 10[0m
+[0;32mI (432) bno085_link: WiFi provisioned flag: false[0m
+[0;32mI (442) pp: pp rom version: e7ae62f[0m
+[0;32mI (442) net80211: net80211 rom version: e7ae62f[0m
+[0;32mI (462) wifi:wifi driver task: 3fced718, prio:23, stack:6656, core=0[0m
+[0;32mI (472) wifi:wifi firmware version: 0947e8b[0m
+[0;32mI (472) wifi:wifi certification version: v7.0[0m
+[0;32mI (472) wifi:config NVS flash: enabled[0m
+[0;32mI (472) wifi:config nano formatting: disabled[0m
+[0;32mI (472) wifi:Init data frame dynamic rx buffer num: 32[0m
+[0;32mI (482) wifi:Init static rx mgmt buffer num: 5[0m
+[0;32mI (482) wifi:Init management short buffer num: 32[0m
+[0;32mI (492) wifi:Init dynamic tx buffer num: 32[0m
+[0;32mI (492) wifi:Init static tx FG buffer num: 2[0m
+[0;32mI (492) wifi:Init static rx buffer size: 1600[0m
+[0;32mI (502) wifi:Init static rx buffer num: 10[0m
+[0;32mI (502) wifi:Init dynamic rx buffer num: 32[0m
+[0;32mI (512) wifi_init: rx ba win: 6[0m
+[0;32mI (512) wifi_init: accept mbox: 6[0m
+[0;32mI (512) wifi_init: tcpip mbox: 32[0m
+[0;32mI (512) wifi_init: udp mbox: 6[0m
+[0;32mI (522) wifi_init: tcp mbox: 6[0m
+[0;32mI (522) wifi_init: tcp tx win: 5760[0m
+[0;32mI (522) wifi_init: tcp rx win: 5760[0m
+[0;32mI (532) wifi_init: tcp mss: 1440[0m
+[0;32mI (532) wifi_init: WiFi IRAM OP enabled[0m
+[0;32mI (532) wifi_init: WiFi RX IRAM OP enabled[0m
+[0;32mI (542) bno085_link: No WiFi credentials found, start SoftAP provisioning[0m
+[0;32mI (552) phy_init: phy_version 711,97bcf0a2,Aug 25 2025,19:04:10[0m
+[0;32mI (592) wifi:mode : sta (e0:72:a1:a9:59:58) + softAP (e0:72:a1:a9:59:59)[0m
+[0;32mI (592) wifi:enable tsf[0m
+[0;32mI (602) wifi:Total power save buffer number: 16[0m
+[0;32mI (602) wifi:Init max length of beacon: 752/752[0m
+[0;32mI (602) wifi:Init max length of beacon: 752/752[0m
+[0;32mI (602) esp_netif_lwip: DHCP server started on interface WIFI_AP_DEF with IP: 192.168.4.1[0m
+[0;32mI (612) bno085_link: SoftAP netif configured: ip=192.168.4.1 netmask=255.255.255.0[0m
+[0;32mI (622) bno085_link: Captive DNS server started on 192.168.4.1:53[0m
+[0;32mI (622) bno085_link: SoftAP provisioning started: ssid=BianzongHammer-A95958 portal=http://192.168.4.1[0m
+[0;32mI (632) bno085_link: Provisioning ready in SoftAP mode (BianzongHammer-A95958).[0m
+[0;32mI (642) bno085_link: Provisioning service ready. Hammer ID=10, service=BianzongHammer-A95958[0m
+[0;32mI (652) main_task: Returned from app_main()[0m
+[0;32mI (652) bno085_link: BNO085 + DRV2605L motion-link test[0m
+[0;32mI (662) bno085_link: BNO085 wiring: ESP32 TX/GPIO2 -> BNO085 RX, ESP32 RX/GPIO1 <- BNO085 TX, UART-SHTP auto-probe[0m
+[0;32mI (672) bno085_link: DRV2605L wiring: SDA -> GPIO20, SCL -> GPIO19, addr=0x5A[0m
+[0;32mI (672) bno085_link: Strike detection: pure angular velocity (air swing mode), swing_detect=250.0°/s, cooldown=220000us[0m
+[0;32mI (682) bno085_link: Strike tiers: light 300.0-499.9°/s -> effect 10, medium 500.0-799.9°/s -> effect 14, heavy >=800.0°/s -> effect 47[0m
+[0;32mI (702) bno085_link: Octave buttons ready on GPIO9-GPIO12, default octave=3[0m
+[0;32mI (702) bno085_link: Probing DRV2605L at address 0x5A...[0m
+[0;32mI (712) bno085_link: DRV2605L detected at 0x5A, STATUS=0xE4 MODE=0x00[0m
+[0;32mI (722) bno085_link: DRV2605L configured: ready=no STATUS=ESP_OK:0xE0 MODE=ESP_OK:0x00 LIB=ESP_OK:0x01 WAVE1=ESP_OK:0x01 GO=ESP_OK:0x00 FB=ESP_OK:0x8F CTRL3=ESP_OK:0x80[0m
+[0;32mI (732) bno085_link: After probe_drv2605(): g_drv_ready=true[0m
+[0;32mI (742) bno085_link: DRV2605L startup pulse triggered[0m
+[0;32mI (1992) bno085_link: BNO probe baud=115200 raw_bytes=0 shtp_frames=0 first_shtp_len=0 preview=(none)[0m
+[0;32mI (3242) bno085_link: BNO probe baud=230400 raw_bytes=0 shtp_frames=0 first_shtp_len=0 preview=(none)[0m
+[0;32mI (4492) bno085_link: BNO probe baud=460800 raw_bytes=0 shtp_frames=0 first_shtp_len=0 preview=(none)[0m
+[0;32mI (5742) bno085_link: BNO probe baud=921600 raw_bytes=0 shtp_frames=0 first_shtp_len=0 preview=(none)[0m
+[0;32mI (6992) bno085_link: BNO probe baud=1000000 raw_bytes=0 shtp_frames=0 first_shtp_len=0 preview=(none)[0m
+[0;32mI (8242) bno085_link: BNO probe baud=1500000 raw_bytes=0 shtp_frames=0 first_shtp_len=0 preview=(none)[0m
+[0;32mI (9492) bno085_link: BNO probe baud=2000000 raw_bytes=0 shtp_frames=0 first_shtp_len=0 preview=(none)[0m

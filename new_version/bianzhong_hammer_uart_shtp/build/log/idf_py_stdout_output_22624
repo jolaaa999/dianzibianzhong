@@ -1,0 +1,79 @@
+Command: ninja flash
+[1/5] C:\WINDOWS\system32\cmd.exe /C "cd /D D:\txw_uni\programmingproject\enterprise\20260710_bianzhong\bianzhong_hammer_uart_shtp\build\esp-idf\esptool_py && C:\Espressif\tools\python\v5.5.4\venv\Scripts\python.exe D:/esp-idf/.espressif/v5.5.4/esp-idf/components/partition_table/check_sizes.py --offset 0x8000 partition --type app D:/txw_uni/programmingproject/enterprise/20260710_bianzhong/bianzhong_hammer_uart_shtp/build/partition_table/partition-table.bin D:/txw_uni/programmingproject/enterprise/20260710_bianzhong/bianzhong_hammer_uart_shtp/build/bianzhong_hammer_uart_shtp.bin"
+bianzhong_hammer_uart_shtp.bin binary size 0xc9480 bytes. Smallest app partition is 0x200000 bytes. 0x136b80 bytes (61%) free.
+[2/5] Performing build step for 'bootloader'
+[1/1] C:\WINDOWS\system32\cmd.exe /C "cd /D D:\txw_uni\programmingproject\enterprise\20260710_bianzhong\bianzhong_hammer_uart_shtp\build\bootloader\esp-idf\esptool_py && C:\Espressif\tools\python\v5.5.4\venv\Scripts\python.exe D:/esp-idf/.espressif/v5.5.4/esp-idf/components/partition_table/check_sizes.py --offset 0x8000 bootloader 0x0 D:/txw_uni/programmingproject/enterprise/20260710_bianzhong/bianzhong_hammer_uart_shtp/build/bootloader/bootloader.bin"
+Bootloader binary size 0x5160 bytes. 0x2ea0 bytes (36%) free.
+[3/5] No install step for 'bootloader'
+[4/5] Completed 'bootloader'
+[4/5] C:\WINDOWS\system32\cmd.exe /C "cd /D D:\esp-idf\.espressif\v5.5.4\esp-idf\components\esptool_py && C:\Espressif\tools\cmake\3.30.2\bin\cmake.exe -D IDF_PATH=D:/esp-idf/.espressif/v5.5.4/esp-idf -D SERIAL_TOOL=C:/Espressif/tools/python/v5.5.4/venv/Scripts/python.exe;;D:/esp-idf/.espressif/v5.5.4/esp-idf/components/esptool_py/esptool/esptool.py;--chip;esp32s3 -D SERIAL_TOOL_ARGS=--before=default_reset;--after=hard_reset;write_flash;@flash_args -D WORKING_DIRECTORY=D:/txw_uni/programmingproject/enterprise/20260710_bianzhong/bianzhong_hammer_uart_shtp/build -P D:/esp-idf/.espressif/v5.5.4/esp-idf/components/esptool_py/run_serial_tool.cmake"
+esptool.py --chip esp32s3 -p COM11 -b 460800 --before=default_reset --after=hard_reset write_flash --flash_mode dio --flash_freq 80m --flash_size 8MB 0x0 bootloader/bootloader.bin 0x20000 bianzhong_hammer_uart_shtp.bin 0x8000 partition_table/partition-table.bin 0xf000 ota_data_initial.bin
+esptool.py v4.12.dev3
+Serial port COM11
+Connecting....
+Chip is ESP32-S3 (QFN56) (revision v0.2)
+Features: WiFi, BLE, Embedded PSRAM 8MB (AP_3v3)
+Crystal is 40MHz
+MAC: e0:72:a1:a9:59:58
+Uploading stub...
+Running stub...
+Stub running...
+Changing baud rate to 460800
+Changed.
+Configuring flash size...
+Flash will be erased from 0x00000000 to 0x00005fff...
+Flash will be erased from 0x00020000 to 0x000e9fff...
+Flash will be erased from 0x00008000 to 0x00008fff...
+Flash will be erased from 0x0000f000 to 0x00010fff...
+SHA digest in image updated
+Compressed 20832 bytes to 13349...
+Writing at 0x00000000... (100 %)
+Wrote 20832 bytes (13349 compressed) at 0x00000000 in 0.5 seconds (effective 354.7 kbit/s)...
+Hash of data verified.
+Compressed 824448 bytes to 537135...
+Writing at 0x00020000... (3 %)
+Writing at 0x0002c3d7... (6 %)
+Writing at 0x00037ccc... (9 %)
+Writing at 0x000416d9... (12 %)
+Writing at 0x00049959... (15 %)
+Writing at 0x0004f510... (18 %)
+Writing at 0x00055252... (21 %)
+Writing at 0x0005ad79... (24 %)
+Writing at 0x0006044d... (27 %)
+Writing at 0x000661ff... (30 %)
+Writing at 0x0006b40a... (33 %)
+Writing at 0x0007076a... (36 %)
+Writing at 0x00075ae9... (39 %)
+Writing at 0x0007b00d... (42 %)
+Writing at 0x000808a4... (45 %)
+Writing at 0x00085da3... (48 %)
+Writing at 0x0008b1a8... (51 %)
+Writing at 0x00090370... (54 %)
+Writing at 0x000957ee... (57 %)
+Writing at 0x0009b0c8... (60 %)
+Writing at 0x000a0652... (63 %)
+Writing at 0x000a59b3... (66 %)
+Writing at 0x000aaef5... (69 %)
+Writing at 0x000b0ae4... (72 %)
+Writing at 0x000b5cfb... (75 %)
+Writing at 0x000bae01... (78 %)
+Writing at 0x000c0168... (81 %)
+Writing at 0x000c5812... (84 %)
+Writing at 0x000cafd2... (87 %)
+Writing at 0x000d404d... (90 %)
+Writing at 0x000d9854... (93 %)
+Writing at 0x000df342... (96 %)
+Writing at 0x000e4c92... (100 %)
+Wrote 824448 bytes (537135 compressed) at 0x00020000 in 12.2 seconds (effective 542.3 kbit/s)...
+Hash of data verified.
+Compressed 3072 bytes to 120...
+Writing at 0x00008000... (100 %)
+Wrote 3072 bytes (120 compressed) at 0x00008000 in 0.0 seconds (effective 768.3 kbit/s)...
+Hash of data verified.
+Compressed 8192 bytes to 31...
+Writing at 0x0000f000... (100 %)
+Wrote 8192 bytes (31 compressed) at 0x0000f000 in 0.0 seconds (effective 2583.8 kbit/s)...
+Hash of data verified.
+
+Leaving...
+Hard resetting via RTS pin...

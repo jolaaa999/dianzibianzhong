@@ -1,0 +1,21 @@
+idf_component_register(
+    SRCS
+        "../src/main.cpp"
+        "../third_party/sh2/sh2.c"
+        "../third_party/sh2/sh2_SensorValue.c"
+        "../third_party/sh2/sh2_util.c"
+        "../third_party/sh2/shtp.c"
+    INCLUDE_DIRS
+        "../src"
+        "../third_party/sh2"
+    PRIV_REQUIRES
+        driver
+        esp_timer
+        log
+        esp_netif
+        esp_wifi
+        esp_event
+        esp_http_server
+        nvs_flash
+        lwip
+)
