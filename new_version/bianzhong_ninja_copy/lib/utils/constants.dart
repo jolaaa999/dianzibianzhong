@@ -59,6 +59,14 @@ class AppConstants {
   static const double bladeTrailGlowWidth = 12.0;
   static const double trailHitMinSegmentLength = 0.008;
   static const Duration comboWindow = Duration(milliseconds: 600);
+
+  // ────────────────────────────────────────────
+  // 锤子姿态映射校准参数
+  // 如果光标移动方向与挥动方向不一致，修改 HammerPoseMapper 中的常量：
+  //   lib/utils/hammer_pose_mapper.dart
+  //   _forwardX/Y/Z  — BNO085 传感器哪根轴指向锤子尖端
+  //   _cursorSignX/Y — 方向反转（1.0=不改, -1.0=反转）
+  // ────────────────────────────────────────────
 }
 
 /// 编钟音高映射（5 个八度，60 个 bellId）

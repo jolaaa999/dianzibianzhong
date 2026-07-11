@@ -107,11 +107,15 @@ class HammerPoseMapper {
       deltaEl = deltaEl.clamp(-_maxFrameDeltaDeg, _maxFrameDeltaDeg);
     }
 
-    state.cursorX = (state.cursorX! - deltaAz / _degPerScreenWidth).clamp(
+    state.cursorX = (state.cursorX! -
+            deltaAz / _degPerScreenWidth * _cursorSignX)
+        .clamp(
       0.0,
       1.0,
     );
-    state.cursorY = (state.cursorY! - deltaEl / _degPerScreenHeight).clamp(
+    state.cursorY = (state.cursorY! -
+            deltaEl / _degPerScreenHeight * _cursorSignY)
+        .clamp(
       0.0,
       1.0,
     );
@@ -192,12 +196,38 @@ class HammerPoseMapper {
 
   static double _lerp(double a, double b, double t) => a + ((b - a) * t);
 
+  /// BNO085 传感器安装方向：锤子手柄指向哪个传感器轴？
+  ///
+  /// BNO085 芯片坐标系（Android 标准）：
+  ///   X — 垂直于芯片表面 / PCB 平面法线
+  ///   Y — 沿 PCB 短边
+  ///   Z — 沿 PCB 长边
+  ///
+  /// 大多数锤子安装：PCB 平放，长边沿手柄 → Z 轴指向手柄尖端。
+  /// 如果你的锤子方向不同，修改这里：
+  static const double _forwardX = 0.0;
+  static const double _forwardY = 0.0;
+  static const double _forwardZ = 1.0;
+
+  /// 方向反转修正（如果光标方向与挥动方向相反，反转对应轴）。
+  /// 正值 = 不改，负值 = 反转。
+  static const double _cursorSignX = -1.0;  // 水平方向：-1 = 锤子右指→光标右移
+  static const double _cursorSignY = -1.0;  // 垂直方向：-1 = 锤子下指→光标下移
+
   static Vector3 _rotateForward(Quaternion q) {
     final w = q.w, x = q.x, y = q.y, z = q.z;
+    // 将锤子的"前向轴"（默认为传感器 Z 轴）旋转到世界坐标系
+    final fx = _forwardX, fy = _forwardY, fz = _forwardZ;
     return Vector3(
-      x: 1 - 2 * (y * y + z * z),
-      y: 2 * (x * y + w * z),
-      z: 2 * (x * z - w * y),
+      x: (1 - 2 * (y * y + z * z)) * fx +
+          (2 * (x * y - w * z)) * fy +
+          (2 * (x * z + w * y)) * fz,
+      y: (2 * (x * y + w * z)) * fx +
+          (1 - 2 * (x * x + z * z)) * fy +
+          (2 * (y * z - w * x)) * fz,
+      z: (2 * (x * z - w * y)) * fx +
+          (2 * (y * z + w * x)) * fy +
+          (1 - 2 * (x * x + y * y)) * fz,
     );
   }
 
