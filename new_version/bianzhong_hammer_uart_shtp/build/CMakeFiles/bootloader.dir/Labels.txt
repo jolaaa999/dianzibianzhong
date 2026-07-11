@@ -1,13 +1,13 @@
 # Target labels
  bootloader
 # Source files and their labels
-D:/txw_uni/programmingproject/enterprise/20260710_bianzhong/bianzhong_hammer_uart_shtp/build/CMakeFiles/bootloader
-D:/txw_uni/programmingproject/enterprise/20260710_bianzhong/bianzhong_hammer_uart_shtp/build/CMakeFiles/bootloader.rule
-D:/txw_uni/programmingproject/enterprise/20260710_bianzhong/bianzhong_hammer_uart_shtp/build/CMakeFiles/bootloader-complete.rule
-D:/txw_uni/programmingproject/enterprise/20260710_bianzhong/bianzhong_hammer_uart_shtp/build/bootloader-prefix/src/bootloader-stamp/bootloader-build.rule
-D:/txw_uni/programmingproject/enterprise/20260710_bianzhong/bianzhong_hammer_uart_shtp/build/bootloader-prefix/src/bootloader-stamp/bootloader-configure.rule
-D:/txw_uni/programmingproject/enterprise/20260710_bianzhong/bianzhong_hammer_uart_shtp/build/bootloader-prefix/src/bootloader-stamp/bootloader-download.rule
-D:/txw_uni/programmingproject/enterprise/20260710_bianzhong/bianzhong_hammer_uart_shtp/build/bootloader-prefix/src/bootloader-stamp/bootloader-install.rule
-D:/txw_uni/programmingproject/enterprise/20260710_bianzhong/bianzhong_hammer_uart_shtp/build/bootloader-prefix/src/bootloader-stamp/bootloader-mkdir.rule
-D:/txw_uni/programmingproject/enterprise/20260710_bianzhong/bianzhong_hammer_uart_shtp/build/bootloader-prefix/src/bootloader-stamp/bootloader-patch.rule
-D:/txw_uni/programmingproject/enterprise/20260710_bianzhong/bianzhong_hammer_uart_shtp/build/bootloader-prefix/src/bootloader-stamp/bootloader-update.rule
+D:/Desktop/dianzibianzhong/new_version/bianzhong_hammer_uart_shtp/build/CMakeFiles/bootloader
+D:/Desktop/dianzibianzhong/new_version/bianzhong_hammer_uart_shtp/build/CMakeFiles/bootloader.rule
+D:/Desktop/dianzibianzhong/new_version/bianzhong_hammer_uart_shtp/build/CMakeFiles/bootloader-complete.rule
+D:/Desktop/dianzibianzhong/new_version/bianzhong_hammer_uart_shtp/build/bootloader-prefix/src/bootloader-stamp/bootloader-build.rule
+D:/Desktop/dianzibianzhong/new_version/bianzhong_hammer_uart_shtp/build/bootloader-prefix/src/bootloader-stamp/bootloader-configure.rule
+D:/Desktop/dianzibianzhong/new_version/bianzhong_hammer_uart_shtp/build/bootloader-prefix/src/bootloader-stamp/bootloader-download.rule
+D:/Desktop/dianzibianzhong/new_version/bianzhong_hammer_uart_shtp/build/bootloader-prefix/src/bootloader-stamp/bootloader-install.rule
+D:/Desktop/dianzibianzhong/new_version/bianzhong_hammer_uart_shtp/build/bootloader-prefix/src/bootloader-stamp/bootloader-mkdir.rule
+D:/Desktop/dianzibianzhong/new_version/bianzhong_hammer_uart_shtp/build/bootloader-prefix/src/bootloader-stamp/bootloader-patch.rule
+D:/Desktop/dianzibianzhong/new_version/bianzhong_hammer_uart_shtp/build/bootloader-prefix/src/bootloader-stamp/bootloader-update.rule

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -76,13 +78,36 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            _buildStep('1', '手机或电脑连接到编钟系统所在的同一局域网'),
+            _buildStep('1', '手机或电脑连接到编钟系统所在的同一局域网 (2.4GHz)'),
             _buildStep(
               '2',
-              '应用监听 UDP ${AppConstants.defaultUdpPort} 广播，等待 ESP32 击锤上报',
+              '击锤上电后自动连接已配网的 WiFi，或使用蓝牙/网页配网',
             ),
-            _buildStep('3', '挥动击锤后，首页会显示姿态数据、活跃击锤和触发的编钟'),
+            _buildStep(
+              '3',
+              '应用监听 UDP ${AppConstants.defaultUdpPort} 广播，接收击锤姿态数据',
+            ),
+            _buildStep('4', '挥动击锤后，首页会显示姿态数据、活跃击锤和触发的编钟'),
             const SizedBox(height: 12),
+            if (Platform.isWindows) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  '⚠ Windows 用户：首次运行时若收不到击锤数据，'
+                  '请以管理员身份运行：\n'
+                  'netsh advfirewall firewall add rule '
+                  'name="BianzhongHammer UDP 3333" '
+                  'dir=in action=allow protocol=UDP localport=3333',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
             Text(
               provider.connectionSummary,
               style: TextStyle(

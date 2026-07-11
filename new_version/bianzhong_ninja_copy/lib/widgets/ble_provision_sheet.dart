@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -95,6 +97,44 @@ class _BleProvisionSheetState extends State<BleProvisionSheet> {
               ),
               const SizedBox(height: 8),
               const Text('扫描名为 `BianzongHammer-XXXXXX` 的击锤，然后下发目标 WiFi。'),
+              if (!Platform.isAndroid && !Platform.isIOS) ...[
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.orange.withValues(alpha: 0.22),
+                    ),
+                  ),
+                  child: const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.info_outline, size: 16, color: Colors.orange),
+                          SizedBox(width: 6),
+                          Text(
+                            '桌面端蓝牙配网提示',
+                            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 6),
+                      Text(
+                        '桌面端不支持直接蓝牙配网。请使用以下方式：\n'
+                        '1. 用手机连接击锤热点 BianzongHammer-XXXXXX\n'
+                        '   密码：12345678\n'
+                        '2. 打开浏览器访问 http://192.168.4.1\n'
+                        '3. 在网页中选择目标 WiFi 并提交',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 16),
               if (provider.currentWifiSsid.isNotEmpty) ...[
                 Container(

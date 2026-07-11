@@ -1,4 +1,4 @@
-/* * Data converted from D:/txw_uni/programmingproject/enterprise/20260710_bianzhong/bianzhong_hammer_uart_shtp/build/esp-idf/mbedtls/x509_crt_bundle
+/* * Data converted from D:/Desktop/dianzibianzhong/new_version/bianzhong_hammer_uart_shtp/build/esp-idf/mbedtls/x509_crt_bundle
  */
 .data
 #if !defined (__APPLE__) && !defined (__linux__)

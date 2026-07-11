@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' show Offset;
 
@@ -168,6 +169,21 @@ class AppProvider with ChangeNotifier {
       _errorMessage = 'Mock 数据源已关闭';
     }
     _notifySafely();
+  }
+
+  /// 如果编译时通过 --dart-define=MOCK=<scenario> 指定了 mock 场景，
+  /// 则在启动时自动打开 Mock 数据源（无需硬件）。
+  void initMockIfRequested(String scenario) {
+    if (scenario.isEmpty) return;
+    _mockScenario = scenario;
+    _mockEnabled = true;
+    _mockSource ??= MockHammerSource(
+      service: _udpService,
+      scenario: _mockScenario,
+    );
+    _mockSource!.setScenario(_mockScenario);
+    _mockSource!.start();
+    // 不触发 notifyListeners() — Provider 初始化期间，UI 尚未 build。
   }
 
   Song? get currentSong => _currentSong;
@@ -351,6 +367,8 @@ class AppProvider with ChangeNotifier {
     _initializeBellStates();
     _setupListeners();
     startHardwareDiscovery();
+    // 启动时自动加载当前 WiFi 信息，供配网界面使用
+    loadCurrentWifiSsid();
   }
 
   void _initializeBellStates() {
@@ -498,7 +516,15 @@ class AppProvider with ChangeNotifier {
       final devices = await _bleProvisioning.scanDevices();
       _bleDevices = devices;
       if (devices.isEmpty) {
-        _bleProvisioningMessage = '未发现可配网击锤，请确认设备已上电并靠近电脑';
+        // 桌面端提示用户使用 SoftAP 网页配网兜底
+        if (!Platform.isAndroid && !Platform.isIOS) {
+          _bleProvisioningMessage = '桌面端暂不支持蓝牙扫描，'
+              '请用手机 App 扫码配网'
+              '或连接击锤热点 BianzongHammer-XXXXXX（密码 12345678）'
+              '后打开 http://192.168.4.1 完成配网';
+        } else {
+          _bleProvisioningMessage = '未发现可配网击锤，请确认设备已上电并靠近手机';
+        }
       } else {
         _bleProvisioningMessage = '已发现 ${devices.length} 个可配网击锤';
       }

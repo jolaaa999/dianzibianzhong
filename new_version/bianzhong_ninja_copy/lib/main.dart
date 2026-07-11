@@ -3,6 +3,11 @@ import 'package:provider/provider.dart';
 import 'providers/app_provider.dart';
 import 'screens/home_screen.dart';
 
+/// 读取编译时环境变量，用于离线演示。
+/// 用法：flutter run -d windows --dart-define=MOCK=swinger
+const String _kMockScenario =
+    String.fromEnvironment('MOCK', defaultValue: '');
+
 void main() {
   runApp(const BianzhongApp());
 }
@@ -13,7 +18,8 @@ class BianzhongApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (context) => AppProvider(),
+      create: (context) => AppProvider()
+        ..initMockIfRequested(_kMockScenario),
       child: MaterialApp(
         title: '虚拟数字编钟',
         debugShowCheckedModeBanner: false,

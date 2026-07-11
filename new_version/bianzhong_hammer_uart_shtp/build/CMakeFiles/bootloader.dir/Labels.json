@@ -2,34 +2,34 @@
 	"sources" : 
 	[
 		{
-			"file" : "D:/txw_uni/programmingproject/enterprise/20260710_bianzhong/bianzhong_hammer_uart_shtp/build/CMakeFiles/bootloader"
+			"file" : "D:/Desktop/dianzibianzhong/new_version/bianzhong_hammer_uart_shtp/build/CMakeFiles/bootloader"
 		},
 		{
-			"file" : "D:/txw_uni/programmingproject/enterprise/20260710_bianzhong/bianzhong_hammer_uart_shtp/build/CMakeFiles/bootloader.rule"
+			"file" : "D:/Desktop/dianzibianzhong/new_version/bianzhong_hammer_uart_shtp/build/CMakeFiles/bootloader.rule"
 		},
 		{
-			"file" : "D:/txw_uni/programmingproject/enterprise/20260710_bianzhong/bianzhong_hammer_uart_shtp/build/CMakeFiles/bootloader-complete.rule"
+			"file" : "D:/Desktop/dianzibianzhong/new_version/bianzhong_hammer_uart_shtp/build/CMakeFiles/bootloader-complete.rule"
 		},
 		{
-			"file" : "D:/txw_uni/programmingproject/enterprise/20260710_bianzhong/bianzhong_hammer_uart_shtp/build/bootloader-prefix/src/bootloader-stamp/bootloader-build.rule"
+			"file" : "D:/Desktop/dianzibianzhong/new_version/bianzhong_hammer_uart_shtp/build/bootloader-prefix/src/bootloader-stamp/bootloader-build.rule"
 		},
 		{
-			"file" : "D:/txw_uni/programmingproject/enterprise/20260710_bianzhong/bianzhong_hammer_uart_shtp/build/bootloader-prefix/src/bootloader-stamp/bootloader-configure.rule"
+			"file" : "D:/Desktop/dianzibianzhong/new_version/bianzhong_hammer_uart_shtp/build/bootloader-prefix/src/bootloader-stamp/bootloader-configure.rule"
 		},
 		{
-			"file" : "D:/txw_uni/programmingproject/enterprise/20260710_bianzhong/bianzhong_hammer_uart_shtp/build/bootloader-prefix/src/bootloader-stamp/bootloader-download.rule"
+			"file" : "D:/Desktop/dianzibianzhong/new_version/bianzhong_hammer_uart_shtp/build/bootloader-prefix/src/bootloader-stamp/bootloader-download.rule"
 		},
 		{
-			"file" : "D:/txw_uni/programmingproject/enterprise/20260710_bianzhong/bianzhong_hammer_uart_shtp/build/bootloader-prefix/src/bootloader-stamp/bootloader-install.rule"
+			"file" : "D:/Desktop/dianzibianzhong/new_version/bianzhong_hammer_uart_shtp/build/bootloader-prefix/src/bootloader-stamp/bootloader-install.rule"
 		},
 		{
-			"file" : "D:/txw_uni/programmingproject/enterprise/20260710_bianzhong/bianzhong_hammer_uart_shtp/build/bootloader-prefix/src/bootloader-stamp/bootloader-mkdir.rule"
+			"file" : "D:/Desktop/dianzibianzhong/new_version/bianzhong_hammer_uart_shtp/build/bootloader-prefix/src/bootloader-stamp/bootloader-mkdir.rule"
 		},
 		{
-			"file" : "D:/txw_uni/programmingproject/enterprise/20260710_bianzhong/bianzhong_hammer_uart_shtp/build/bootloader-prefix/src/bootloader-stamp/bootloader-patch.rule"
+			"file" : "D:/Desktop/dianzibianzhong/new_version/bianzhong_hammer_uart_shtp/build/bootloader-prefix/src/bootloader-stamp/bootloader-patch.rule"
 		},
 		{
-			"file" : "D:/txw_uni/programmingproject/enterprise/20260710_bianzhong/bianzhong_hammer_uart_shtp/build/bootloader-prefix/src/bootloader-stamp/bootloader-update.rule"
+			"file" : "D:/Desktop/dianzibianzhong/new_version/bianzhong_hammer_uart_shtp/build/bootloader-prefix/src/bootloader-stamp/bootloader-update.rule"
 		}
 	],
 	"target" : 

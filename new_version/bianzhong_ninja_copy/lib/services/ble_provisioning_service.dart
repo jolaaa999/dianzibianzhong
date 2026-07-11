@@ -223,36 +223,49 @@ class BleProvisioningService {
   }
 
   Future<List<BleProvisionDevice>> _scanDesktopDevices() async {
-    final commands = <String>[
-      'timeout 12 bluetoothctl --timeout 10 scan on',
-      'bluetoothctl devices',
-      'bluetoothctl --timeout 1 scan off',
-    ].join('\n');
-
-    final result = await Process.run('bash', [
-      '-lc',
-      commands,
-    ], runInShell: false);
-
-    final devices = <String, BleProvisionDevice>{};
-    final combined = '${result.stdout}\n${result.stderr}';
-    for (final rawLine in const LineSplitter().convert(combined)) {
-      final line = rawLine.trim();
-      final match = RegExp(r'Device\s+([0-9A-F:]{17})\s+(.+)$').firstMatch(line);
-      if (match == null) {
-        continue;
-      }
-      final id = match.group(1)!;
-      final name = match.group(2)!.trim();
-      if (!name.startsWith(AppConstants.bleProvisionPrefix)) {
-        continue;
-      }
-      devices[id] = BleProvisionDevice(id: id, name: name);
+    // 桌面端蓝牙扫描仅在 Linux (bluetoothctl) 下可用。
+    // Windows/macOS 桌面端暂不支持直接蓝牙扫描，请使用手机 App 或击锤 SoftAP 网页配网。
+    if (Platform.isLinux) {
+      return _scanDesktopDevicesLinux();
     }
+    return const [];
+  }
 
-    final list = devices.values.toList(growable: false)
-      ..sort((left, right) => left.name.compareTo(right.name));
-    return list;
+  Future<List<BleProvisionDevice>> _scanDesktopDevicesLinux() async {
+    try {
+      final commands = <String>[
+        'timeout 12 bluetoothctl --timeout 10 scan on',
+        'bluetoothctl devices',
+        'bluetoothctl --timeout 1 scan off',
+      ].join('\n');
+
+      final result = await Process.run('bash', [
+        '-lc',
+        commands,
+      ], runInShell: false);
+
+      final devices = <String, BleProvisionDevice>{};
+      final combined = '${result.stdout}\n${result.stderr}';
+      for (final rawLine in const LineSplitter().convert(combined)) {
+        final line = rawLine.trim();
+        final match = RegExp(r'Device\s+([0-9A-F:]{17})\s+(.+)$').firstMatch(line);
+        if (match == null) {
+          continue;
+        }
+        final id = match.group(1)!;
+        final name = match.group(2)!.trim();
+        if (!name.startsWith(AppConstants.bleProvisionPrefix)) {
+          continue;
+        }
+        devices[id] = BleProvisionDevice(id: id, name: name);
+      }
+
+      final list = devices.values.toList(growable: false)
+        ..sort((left, right) => left.name.compareTo(right.name));
+      return list;
+    } catch (_) {
+      return const [];
+    }
   }
 
   Future<void> _connectAndNegotiate(String deviceId) async {
