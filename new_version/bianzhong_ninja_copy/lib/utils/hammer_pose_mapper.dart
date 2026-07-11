@@ -29,19 +29,22 @@ class HammerPoseProjection {
 /// dead zone suppresses tremor while a higher response factor keeps fast
 /// swings responsive.
 class HammerPoseMapper {
-  static const double _degPerScreenWidth = 46.0;
-  static const double _degPerScreenHeight = 32.0;
+  // 屏幕映射灵敏度：旋转多少度横跨整个屏幕（值越大越不灵敏，需要转更多）
+  static const double _degPerScreenWidth = 80.0;
+  static const double _degPerScreenHeight = 60.0;
 
   static const double _stillAngularVelocity = 12.0;
   static const double _slowAngularVelocity = 55.0;
   static const double _fastAngularVelocity = 260.0;
-  static const double _stillDeadZoneDeg = 0.18;
-  static const double _slowDeadZoneDeg = 0.08;
-  static const double _fastDeadZoneDeg = 0.025;
+  // 动态死区（度/帧）：静止时最大，快速时最小，低于阈值忽略防抖
+  static const double _stillDeadZoneDeg = 0.10;
+  static const double _slowDeadZoneDeg = 0.04;
+  static const double _fastDeadZoneDeg = 0.015;
 
-  static const double _slowAlpha = 0.30;
-  static const double _fastAlpha = 0.84;
-  static const double _maxFrameDeltaDeg = 9.0;
+  // EMA 平滑系数：越大延迟越低（0.65=3帧到95%，0.94=2帧到95%）
+  static const double _slowAlpha = 0.65;
+  static const double _fastAlpha = 0.94;
+  static const double _maxFrameDeltaDeg = 15.0;
 
   static const Duration _maxDeltaGap = Duration(milliseconds: 200);
   static const Duration _resetGap = Duration(milliseconds: 1500);

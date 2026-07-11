@@ -70,10 +70,10 @@ class StrikeRouter {
   /// UI strike 强度阈值（直接复用 AppConstants.minUiStrikeIntensity）
   static const double _minUiStrikeIntensity = 0.12;
 
-  /// gesture 补判常量（沿用 AppProvider 中原始逻辑，按计划收敛到此处）
-  static const double _gestureMinDownwardVelocity = 0.22;
-  static const double _gestureMinAngularVelocity = 105.0;
-  static const double _gestureForceAngularVelocity = 180.0;
+  /// gesture 补判常量（需与固件 ANGULAR_VEL_*_THRESHOLD 保持比例一致）
+  static const double _gestureMinDownwardVelocity = 0.30;
+  static const double _gestureMinAngularVelocity = 200.0;
+  static const double _gestureForceAngularVelocity = 350.0;
   static const Duration _gestureMinLockDuration =
       Duration(milliseconds: 55);
 

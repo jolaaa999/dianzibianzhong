@@ -901,9 +901,9 @@ class AppProvider with ChangeNotifier {
     required Offset strikePoint,
     required StageStrikeHitResult? strikeHit,
   }) {
-    const double minDownwardVelocity = 0.22;
-    const double minAngularVelocity = 105.0;
-    const double forceAngularVelocity = 180.0;
+    const double minDownwardVelocity = 0.30;
+    const double minAngularVelocity = 200.0;
+    const double forceAngularVelocity = 350.0;
     const double minLockDurationMs = 55.0;
 
     final previousQuaternion = state.previousQuaternion;
