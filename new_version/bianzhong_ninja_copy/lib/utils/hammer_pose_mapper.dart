@@ -213,9 +213,8 @@ class HammerPoseMapper {
   static const double _forwardZ = 1.0;
 
   /// 方向反转修正（如果光标方向与挥动方向相反，反转对应轴）。
-  /// 正值 = 不改，负值 = 反转。
-  static const double _cursorSignX = -1.0;  // 水平方向：-1 = 锤子右指→光标右移
-  static const double _cursorSignY = -1.0;  // 垂直方向：-1 = 锤子下指→光标下移
+  static const double _cursorSignX = -1.0;  // 水平：锤子右指→光标右移 ✅
+  static const double _cursorSignY =  1.0;  // 垂直：锤子上指→光标上移（修正镜像）
 
   static Vector3 _rotateForward(Quaternion q) {
     final w = q.w, x = q.x, y = q.y, z = q.z;
