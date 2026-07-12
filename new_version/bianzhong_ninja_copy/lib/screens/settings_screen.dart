@@ -99,6 +99,21 @@ class SettingsScreen extends StatelessWidget {
                 leading: const Icon(Icons.music_note),
                 title: const Text('当前八度'),
                 subtitle: Text('${provider.currentOctave}'),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.remove),
+                      onPressed: () =>
+                          provider.setCurrentOctave(provider.currentOctave - 1),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.add),
+                      onPressed: () =>
+                          provider.setCurrentOctave(provider.currentOctave + 1),
+                    ),
+                  ],
+                ),
               ),
               ListTile(
                 leading: const Icon(Icons.gps_fixed),

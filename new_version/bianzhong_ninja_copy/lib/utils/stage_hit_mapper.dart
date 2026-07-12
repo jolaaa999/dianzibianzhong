@@ -34,14 +34,14 @@ class TrailHitResult {
   });
 }
 
-class _StageBellLayoutConfig {
+class StageBellLayoutConfig {
   final String note;
   final double x;
   final double y;
   final bool isUpper;
   final double visualScale;
 
-  const _StageBellLayoutConfig({
+  const StageBellLayoutConfig({
     required this.note,
     required this.x,
     required this.y,
@@ -86,19 +86,19 @@ class StageHitMapper {
   static const double _yawGain = 1.0;
   static const double _pitchGain = 1.0;
 
-  static const List<_StageBellLayoutConfig> _bells = [
-    _StageBellLayoutConfig(note: 'C', x: 0.10, y: 0.78, isUpper: false, visualScale: 1.10),
-    _StageBellLayoutConfig(note: 'D', x: 0.23, y: 0.78, isUpper: false, visualScale: 1.06),
-    _StageBellLayoutConfig(note: 'E', x: 0.36, y: 0.78, isUpper: false, visualScale: 1.02),
-    _StageBellLayoutConfig(note: 'F', x: 0.50, y: 0.78, isUpper: false, visualScale: 1.00),
-    _StageBellLayoutConfig(note: 'G', x: 0.64, y: 0.78, isUpper: false, visualScale: 0.97),
-    _StageBellLayoutConfig(note: 'A', x: 0.77, y: 0.78, isUpper: false, visualScale: 0.94),
-    _StageBellLayoutConfig(note: 'B', x: 0.90, y: 0.78, isUpper: false, visualScale: 0.92),
-    _StageBellLayoutConfig(note: 'C#', x: 0.25, y: 0.27, isUpper: true, visualScale: 1.12),
-    _StageBellLayoutConfig(note: 'D#', x: 0.375, y: 0.27, isUpper: true, visualScale: 1.04),
-    _StageBellLayoutConfig(note: 'F#', x: 0.50, y: 0.27, isUpper: true, visualScale: 0.96),
-    _StageBellLayoutConfig(note: 'G#', x: 0.625, y: 0.27, isUpper: true, visualScale: 0.88),
-    _StageBellLayoutConfig(note: 'A#', x: 0.75, y: 0.27, isUpper: true, visualScale: 0.80),
+  static const List<StageBellLayoutConfig> bellLayouts = [
+    StageBellLayoutConfig(note: 'C', x: 0.10, y: 0.78, isUpper: false, visualScale: 1.10),
+    StageBellLayoutConfig(note: 'D', x: 0.23, y: 0.78, isUpper: false, visualScale: 1.06),
+    StageBellLayoutConfig(note: 'E', x: 0.36, y: 0.78, isUpper: false, visualScale: 1.02),
+    StageBellLayoutConfig(note: 'F', x: 0.50, y: 0.78, isUpper: false, visualScale: 1.00),
+    StageBellLayoutConfig(note: 'G', x: 0.64, y: 0.78, isUpper: false, visualScale: 0.97),
+    StageBellLayoutConfig(note: 'A', x: 0.77, y: 0.78, isUpper: false, visualScale: 0.94),
+    StageBellLayoutConfig(note: 'B', x: 0.90, y: 0.78, isUpper: false, visualScale: 0.92),
+    StageBellLayoutConfig(note: 'C#', x: 0.25, y: 0.27, isUpper: true, visualScale: 1.12),
+    StageBellLayoutConfig(note: 'D#', x: 0.375, y: 0.27, isUpper: true, visualScale: 1.04),
+    StageBellLayoutConfig(note: 'F#', x: 0.50, y: 0.27, isUpper: true, visualScale: 0.96),
+    StageBellLayoutConfig(note: 'G#', x: 0.625, y: 0.27, isUpper: true, visualScale: 0.88),
+    StageBellLayoutConfig(note: 'A#', x: 0.75, y: 0.27, isUpper: true, visualScale: 0.80),
   ];
 
   static Offset sensorToStagePoint({
@@ -209,7 +209,7 @@ class StageHitMapper {
     StageStrikeHitResult? bestMatch;
     double bestDistance = double.infinity;
 
-    for (final bell in _bells) {
+    for (final bell in bellLayouts) {
       final bellId = BellMapping.getBellId(currentOctave, bell.note);
       if (bellId == null) {
         continue;
@@ -267,7 +267,7 @@ class StageHitMapper {
     for (final seg in segments) {
       if (!seg.isSlashing) continue;
 
-      for (final bell in _bells) {
+      for (final bell in bellLayouts) {
         final bellId = BellMapping.getBellId(currentOctave, bell.note);
         if (bellId == null || hitBellIds.contains(bellId)) continue;
 
@@ -355,7 +355,7 @@ class StageHitMapper {
     return (point - proj).distance;
   }
 
-  static _StageBellGeometry _resolveBellGeometry(_StageBellLayoutConfig bell) {
+  static _StageBellGeometry _resolveBellGeometry(StageBellLayoutConfig bell) {
     final scale = (bell.isUpper ? 0.95 : 1.00) * bell.visualScale;
     final width = _stageBellWidthRatio * scale;
     final height = _stageBellHeightRatio * scale;

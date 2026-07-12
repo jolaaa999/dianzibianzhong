@@ -45,8 +45,12 @@ class UdpHammerMessage {
   final double quaternionY;
   final double quaternionZ;
   final double force;
-  final int? tierIndex; // 1=light / 2=medium / 3=heavy，从固件 strike JSON 解析
+  final int? tierIndex;
   final int? timestampUs;
+  final double linearAccelX;
+  final double linearAccelY;
+  final double linearAccelZ;
+  final double angularVelocity;
 
   const UdpHammerMessage({
     this.proto = 0,
@@ -66,6 +70,10 @@ class UdpHammerMessage {
     this.force = 0.0,
     this.tierIndex,
     this.timestampUs,
+    this.linearAccelX = 0.0,
+    this.linearAccelY = 0.0,
+    this.linearAccelZ = 0.0,
+    this.angularVelocity = 0.0,
   });
 
   bool get isStrike => type == 'strike';
@@ -121,6 +129,7 @@ class UdpHammerService {
       final hammerInfo = _touchDevice(deviceId, hammerId);
       if (hammerInfo == null) return;
       final quaternion = json['quaternion'] as Map<String, dynamic>?;
+      final linearAccel = json['linearAcceleration'] as Map<String, dynamic>?;
       final tierString = json['tier'] as String?;
       final tierIndex = _tierStringToIndex(tierString);
 
@@ -146,6 +155,14 @@ class UdpHammerService {
         force: ((json['force'] as num?)?.toDouble() ?? 0.0).clamp(0.0, 1.0),
         tierIndex: tierIndex,
         timestampUs: (json['timestamp'] as num?)?.toInt(),
+        linearAccelX:
+            (linearAccel?['x'] as num?)?.toDouble() ?? 0.0,
+        linearAccelY:
+            (linearAccel?['y'] as num?)?.toDouble() ?? 0.0,
+        linearAccelZ:
+            (linearAccel?['z'] as num?)?.toDouble() ?? 0.0,
+        angularVelocity:
+            (json['angularVelocity'] as num?)?.toDouble() ?? 0.0,
       ));
     } catch (error) {
       _handleError(error);
@@ -298,11 +315,25 @@ class UdpHammerService {
 
     _overflowDeviceIds.remove(deviceId);
     final seatIndex = _nextSeatIndex++;
+    // 确保不会出现两个相同手的锤子（防止竞态导致两个都是左手）
+    final existingHands =
+        _presenceByDeviceId.values.map((p) => p.hand).toSet();
+    HammerHand assignedHand;
+    if (existingHands.contains(HammerHand.left) &&
+        !existingHands.contains(HammerHand.right)) {
+      assignedHand = HammerHand.right;
+    } else if (existingHands.contains(HammerHand.right) &&
+        !existingHands.contains(HammerHand.left)) {
+      assignedHand = HammerHand.left;
+    } else {
+      assignedHand =
+          seatIndex.isEven ? HammerHand.left : HammerHand.right;
+    }
     final presence = _ActiveHammerPresence(
       deviceId: deviceId,
       hammerId: hammerId,
       seatIndex: seatIndex,
-      hand: seatIndex.isEven ? HammerHand.left : HammerHand.right,
+      hand: assignedHand,
       lastSeen: now,
     );
     _presenceByDeviceId[deviceId] = presence;

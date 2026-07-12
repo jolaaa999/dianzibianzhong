@@ -1,0 +1,27 @@
+编钟 Ninja 版本修改迁移包
+打包日期：2026-07-12
+
+包含文件：
+1. bianzhong_ninja/source/lib/widgets/stage_bianzhong_view.dart
+2. bianzhong_ninja/source/assets/images/bell_reference.png
+
+本次修改内容：
+- 删除每个编钟上的“正”“侧”文字。
+- 使用参考照片抠图作为编钟主体，保留原始形状、颜色和纹饰。
+- 保留敲击区域、高亮、跟奏和刀光交互。
+- 调整上下横梁位置，使编钟顶部与横梁贴合，呈现悬挂效果。
+
+迁移步骤：
+1. 在新电脑上备份原项目中的同名文件。
+2. 将本压缩包解压到包含 bianzhong_ninja 文件夹的目录中。
+3. 允许覆盖同名文件。
+4. 进入 bianzhong_ninja/source 目录运行：
+   flutter pub get
+   flutter build windows
+5. 开发运行命令：
+   flutter run -d windows
+
+注意：
+- pubspec.yaml 中应已包含 assets/images/ 资源目录声明。
+- 如果新电脑上的项目版本不同，建议先比较 stage_bianzhong_view.dart 再覆盖。
+- 不需要复制 build/、.dart_tool/ 或其他构建产物。

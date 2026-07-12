@@ -115,7 +115,7 @@ constexpr uint32_t MOTION_TASK_STACK_WORDS = 8192;
 constexpr UBaseType_t MOTION_TASK_PRIORITY = 5;
 constexpr BaseType_t MOTION_TASK_CORE = 1;
 constexpr uint64_t LOG_INTERVAL_US = 500000;
-constexpr uint64_t STRIKE_COOLDOWN_US = 220000;
+constexpr uint64_t STRIKE_COOLDOWN_US = 60000;
 constexpr uint64_t OCTAVE_SCAN_INTERVAL_US = 20000;
 constexpr uint64_t OCTAVE_DEBOUNCE_US = 120000;
 

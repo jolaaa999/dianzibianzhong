@@ -40,9 +40,15 @@ class AppProvider with ChangeNotifier {
   String _wsUrl = AppConstants.defaultWsUrl;
   String _errorMessage = '';
   bool _udpListening = false;
+  DateTime? _listeningStartedAt;
+  int? _lastHammerOctave; // 锤子上次上报的八度，只有变化时才更新
   List<ActiveHammerInfo> _activeHammers = [];
   final Map<String, SensorData> _hammerSensorDataByDeviceId = {};
   final Map<String, DateTime> _lastAcceptedStrikeAtByDeviceId = {};
+  final Map<String, int> _lastHoveredBellId = {};
+  final Map<String, int> _pendingNinjaSnapBell = {};
+  final Map<String, StageStrikeRegion> _pendingNinjaSnapRegion = {};
+  final Map<String, DateTime> _ninjaSnapBellCooldown = {}; // 每个钟的冷却时间
   final Map<String, _HammerGestureState> _gestureStateByDeviceId = {};
   List<BleProvisionDevice> _bleDevices = [];
   bool _isBleScanning = false;
@@ -140,10 +146,6 @@ class AppProvider with ChangeNotifier {
     if (!value) {
       _bladeTrailsByDeviceId.clear();
       _slashStatesByDeviceId.clear();
-    } else {
-      if (_currentSong != null) {
-        _stopFollowAlong();
-      }
     }
     _notifySafely();
   }
@@ -204,11 +206,6 @@ class AppProvider with ChangeNotifier {
     final song = SongLibrary.findById(songId);
     if (song == null) return;
     _stopFollowAlong();
-    if (_ninjaMode) {
-      _ninjaMode = false;
-      _bladeTrailsByDeviceId.clear();
-      _slashStatesByDeviceId.clear();
-    }
     _currentSong = song;
     _followElapsedMs = 0;
     _followHitNoteIndices.clear();
@@ -405,6 +402,8 @@ class AppProvider with ChangeNotifier {
           (deviceId, _) => !activeDeviceIds.contains(deviceId),
         );
         _hammerPoseMapper.retainOnly(activeDeviceIds);
+        // 两个锤子 BNO085 安装方向相同，统一使用默认配置
+        // 如需单独调整某个锤子：setDeviceConfig(deviceId, HammerDeviceConfig(signX: ..., signY: ...))
         _requestStageRefresh(immediate: true);
         _refreshConnectionState();
         _notifySafely();
@@ -430,6 +429,8 @@ class AppProvider with ChangeNotifier {
     try {
       await _udpService.start();
       _udpListening = true;
+      _listeningStartedAt = DateTime.now();
+      _currentOctave = AppConstants.defaultOctave;
       _lastUdpMessageAt = DateTime.now();
       _consecutiveEmptyScans = 0;
       _startUdpWatchdog();
@@ -486,6 +487,8 @@ class AppProvider with ChangeNotifier {
     try {
       await _udpService.restart();
       _udpListening = true;
+      _listeningStartedAt = DateTime.now();
+      _currentOctave = AppConstants.defaultOctave;
       _errorMessage = '';
     } catch (error) {
       _udpListening = false;
@@ -681,9 +684,14 @@ class AppProvider with ChangeNotifier {
       AppConstants.minOctave,
       AppConstants.maxOctave,
     );
-    final effectiveOctave = incomingOctave ?? _currentOctave;
-    if (incomingOctave != null && incomingOctave != _currentOctave) {
-      _currentOctave = incomingOctave;
+    final effectiveOctave = _currentOctave;
+    // 记录锤子八度历史，只有两次不同才认为是真实按键（过滤 GPIO 悬空误读）
+    if (incomingOctave != null && !isFollowAlongActive) {
+      if (_lastHammerOctave != null &&
+          incomingOctave != _lastHammerOctave) {
+        _currentOctave = incomingOctave;
+      }
+      _lastHammerOctave = incomingOctave;
     }
 
     final quaternion = Quaternion(
@@ -702,6 +710,9 @@ class AppProvider with ChangeNotifier {
       pitch: message.pitch,
       roll: message.roll,
       timestamp: timestamp,
+      linearAccelX: message.linearAccelX,
+      linearAccelY: message.linearAccelY,
+      linearAccelZ: message.linearAccelZ,
     );
 
     final strikePoint = poseProjection.strikePoint;
@@ -710,6 +721,79 @@ class AppProvider with ChangeNotifier {
       point: strikePoint,
     );
     final bellId = strikeHit?.bellId;
+    // 记住光标最后悬浮的钟（敲击时兜底用）
+    if (strikeHit != null) {
+      _lastHoveredBellId[message.deviceId] = strikeHit.bellId;
+    }
+    final hoveredBell = _lastHoveredBellId[message.deviceId];
+
+    // ── 忍者模式磁吸吸附 ──────────────────────
+    Offset snappedPoint = strikePoint;
+    StageStrikeRegion? snapRegion;
+    if (_ninjaMode) {
+      const double snapRadius = 0.11;
+      const double snapStrength = 0.50;
+      const double autoStrikeDist = 0.08;
+      double bestRegionDist = double.infinity;
+      Offset bestRegionCenter = strikePoint;
+      int bestBellId = 1;
+      StageStrikeRegion bestRegion = StageStrikeRegion.center;
+
+      for (final bell in StageHitMapper.bellLayouts) {
+          final bid = BellMapping.getBellId(effectiveOctave, bell.note);
+          if (bid == null) continue;
+          final center = Offset(bell.x, bell.y);
+
+          // 根据光标相对位置选择吸附目标区域
+          final dx = strikePoint.dx - center.dx;
+          final dy = strikePoint.dy - center.dy;
+          StageStrikeRegion region;
+          Offset target;
+          if (dx < -0.02) {
+            // 光标在左边 → 吸到左侧
+            region = StageStrikeRegion.left;
+            target = Offset(center.dx - 0.035, center.dy + 0.04);
+          } else if (dx > 0.02) {
+            // 光标在右边 → 吸到右侧
+            region = StageStrikeRegion.right;
+            target = Offset(center.dx + 0.035, center.dy + 0.04);
+          } else {
+            // 光标在中间 → 吸到正面
+            region = StageStrikeRegion.center;
+            target = Offset(center.dx, center.dy + 0.06);
+          }
+
+          final dist = (strikePoint - target).distance;
+          if (dist < bestRegionDist) {
+            bestRegionDist = dist;
+            bestRegionCenter = target;
+            bestBellId = bid;
+            bestRegion = region;
+          }
+        }
+
+      if (bestRegionDist < snapRadius) {
+        snappedPoint = Offset(
+          strikePoint.dx + (bestRegionCenter.dx - strikePoint.dx) * snapStrength,
+          strikePoint.dy + (bestRegionCenter.dy - strikePoint.dy) * snapStrength,
+        );
+        _lastHoveredBellId[message.deviceId] = bestBellId;
+        snapRegion = bestRegion;
+        // 自动斩击：用吸附后的距离，按钟冷却
+        final snappedDist = (snappedPoint - bestRegionCenter).distance;
+        final snapNow = DateTime.now();
+        final bellCooldown = _ninjaSnapBellCooldown[message.deviceId];
+        final bellCooldownOk =
+            bellCooldown == null || snapNow.isAfter(bellCooldown);
+        if (snappedDist < autoStrikeDist && bellCooldownOk) {
+          _pendingNinjaSnapBell[message.deviceId] = bestBellId;
+          _pendingNinjaSnapRegion[message.deviceId] = snapRegion!;
+          _ninjaSnapBellCooldown[message.deviceId] =
+              snapNow.add(const Duration(milliseconds: 500));
+        }
+      }
+    }
+
     final adjustedIntensity = (message.force * _sensitivity).clamp(0.0, 1.0);
     final gestureState = _gestureStateByDeviceId.putIfAbsent(
       message.deviceId,
@@ -728,12 +812,19 @@ class AppProvider with ChangeNotifier {
 
     // 用 StrikeRouter 收集所有"应在此帧触发"的击打决策；
     // 这样做替代了原本散落在 UDP 接受判定 / gesture 补判 / 忍者斩击 三处的 if/else。
+    // 敲击时用最后悬浮的钟兜底
+    final effectiveStrikeHit = strikeHit ??
+        (hoveredBell != null
+            ? StageStrikeHitResult(
+                bellId: hoveredBell, region: StageStrikeRegion.center)
+            : null);
+
     final decisions = StrikeRouter.route(
       message: message,
       env: StrikeRouterEnv(
         currentOctave: effectiveOctave,
-        strikePoint: strikePoint,
-        strikeHit: strikeHit,
+        strikePoint: snappedPoint,
+        strikeHit: effectiveStrikeHit,
         ninjaMode: _ninjaMode,
         sensitivity: _sensitivity,
         previousStagePoint: _hammerSensorDataByDeviceId[message.deviceId]
@@ -750,15 +841,14 @@ class AppProvider with ChangeNotifier {
       ),
     );
 
-    // gesture 补判：依旧由 AppProvider 内的状态机做收敛（保持原有行为），
-    // 但其结果并入最终 strikeDispatch 列表，与 StrikeRouter 同源消费。
+    // gesture 补判
     final gestureStrikeIntensity = _resolveGestureStrikeIntensity(
       state: gestureState,
       deviceId: message.deviceId,
       timestamp: timestamp,
       quaternion: quaternion,
-      strikePoint: strikePoint,
-      strikeHit: strikeHit,
+      strikePoint: snappedPoint,
+      strikeHit: effectiveStrikeHit,
     );
 
     final hardwareStrikeAccepted = decisions
@@ -794,15 +884,27 @@ class AppProvider with ChangeNotifier {
       quaternion: quaternion,
       strike: acceptedStrike,
       intensity: effectiveIntensity,
-      stageX: poseProjection.displayPoint.dx,
-      stageY: poseProjection.displayPoint.dy,
+      stageX: snappedPoint.dx,
+      stageY: snappedPoint.dy,
       bellId: bellId,
       octave: effectiveOctave,
       timestampUs: message.timestampUs,
     );
     _hammerSensorDataByDeviceId[message.deviceId] = _latestSensorData!;
 
-    // 把决策列表兑现为实际播放；同时记录最近一次击打时间用于防抖。
+    // 忍者模式吸附自动斩击
+    final pendingSnap = _pendingNinjaSnapBell.remove(message.deviceId);
+    final pendingRegion = _pendingNinjaSnapRegion.remove(message.deviceId);
+    if (pendingSnap != null) {
+      decisions.add(StrikeDecision(
+        bellId: pendingSnap,
+        region: pendingRegion ?? StageStrikeRegion.center,
+        intensity: 0.5,
+        source: StrikeSource.ninjaSlash,
+      ));
+    }
+
+    // 把决策列表兑现为实际播放
     for (final decision in decisions) {
       if (decision.source == StrikeSource.firmwareStrike ||
           decision.source == StrikeSource.gestureStrike ||

@@ -7,49 +7,56 @@ import '../models/sensor_data.dart';
 class HammerPoseProjection {
   final Offset displayPoint;
   final Offset strikePoint;
-  final double relativeYawDeg;
-  final double relativePitchDeg;
-  final double relativeRollDeg;
   final double angularVelocity;
+  final bool isStriking;
 
   const HammerPoseProjection({
     required this.displayPoint,
     required this.strikePoint,
-    required this.relativeYawDeg,
-    required this.relativePitchDeg,
-    required this.relativeRollDeg,
     this.angularVelocity = 0.0,
+    this.isStriking = false,
   });
 }
 
-/// Relative-mode air mouse: orientation deltas drive cursor movement.
-///
-/// The mapper treats the hammer like a mouse rather than a laser pointer:
-/// hand rotation is converted into incremental cursor movement. A dynamic
-/// dead zone suppresses tremor while a higher response factor keeps fast
-/// swings responsive.
+class HammerDeviceConfig {
+  final double signX;
+  final double signY;
+  const HammerDeviceConfig({this.signX = 1.0, this.signY = 1.0});
+}
+
+/// 平移：倾斜绝对映射（Y 轴水平角 → 左右，X 轴倾角 → 上下）
+/// 敲击：Z 轴加速度超阈值
 class HammerPoseMapper {
-  // 屏幕映射灵敏度：旋转多少度横跨整个屏幕（值越大越不灵敏，需要转更多）
-  static const double _degPerScreenWidth = 80.0;
-  static const double _degPerScreenHeight = 60.0;
-
-  static const double _stillAngularVelocity = 12.0;
-  static const double _slowAngularVelocity = 55.0;
-  static const double _fastAngularVelocity = 260.0;
-  // 动态死区（度/帧）：静止时最大，快速时最小，低于阈值忽略防抖
-  static const double _stillDeadZoneDeg = 0.10;
-  static const double _slowDeadZoneDeg = 0.04;
-  static const double _fastDeadZoneDeg = 0.015;
-
-  // EMA 平滑系数：越大延迟越低（0.65=3帧到95%，0.94=2帧到95%）
+  // 倾斜范围（度）
+  static const double _tiltRangeX = 25.0;
   static const double _slowAlpha = 0.65;
   static const double _fastAlpha = 0.94;
-  static const double _maxFrameDeltaDeg = 15.0;
-
-  static const Duration _maxDeltaGap = Duration(milliseconds: 200);
-  static const Duration _resetGap = Duration(milliseconds: 1500);
+  static const double _stillAngVel = 12.0;
+  static const double _fastAngVel = 260.0;
+  static const double _stillDead = 0.10;
+  static const double _slowDead = 0.04;
+  static const double _fastDead = 0.015;
+  static const double _maxDeltaDeg = 90.0;
+  // 敲击
+  /// 施密特触发器：世界 Y 加速度 > 触发阈值即敲击
+  static const double _strikeAccelYThreshold = 0.02;
+  static const double _strikeAccelYReset = 0.005;
+  /// 连续超阈值帧数确认（1=立即触发）
+  static const int _strikeConfirmFrames = 1;
+  /// 加速度 EMA 滤波系数（越小越平滑，0.3=平滑手抖）
+  static const double _accelFilterAlpha = 0.30;
+  static const Duration _strikeLock = Duration(milliseconds: 50);
+  /// 敲击期间位移衰减（越大越快恢复移动）
+  static const double _strikeDamping = 0.4;
+  // 超时
+  static const Duration _resetGap = Duration(seconds: 5);
 
   final Map<String, _DeviceState> _devices = {};
+  final Map<String, HammerDeviceConfig> _deviceConfigs = {};
+  HammerDeviceConfig _defaultConfig = const HammerDeviceConfig();
+
+  void setDefaultConfig(HammerDeviceConfig c) => _defaultConfig = c;
+  void setDeviceConfig(String id, HammerDeviceConfig c) => _deviceConfigs[id] = c;
 
   HammerPoseProjection update({
     required String deviceId,
@@ -58,234 +65,185 @@ class HammerPoseMapper {
     required double pitch,
     required double roll,
     required DateTime timestamp,
+    required double linearAccelX,
+    required double linearAccelY,
+    required double linearAccelZ,
   }) {
     final state = _devices.putIfAbsent(deviceId, _DeviceState.new);
+    state.cursorX ??= 0.5; state.cursorY ??= 0.5;
+    state.smoothX ??= 0.5; state.smoothY ??= 0.5;
 
     if (state.lastSeen != null &&
         timestamp.difference(state.lastSeen!) > _resetGap) {
-      state.reset();
+      // 只重置跟踪参考系，保留光标位置
+      state.prevAzimuth = null; state.prevElevation = null;
+      state.filtAccelY = null; state.strikeArmed = null; state.strikeConfirmCount = null;
     }
     state.lastSeen = timestamp;
+    final cfg = _deviceConfigs[deviceId] ?? _defaultConfig;
 
     final q = quaternion.isIdentityLike
         ? _quatFromEuler(yaw, pitch, roll)
         : quaternion.normalized();
 
-    final pointing = _rotateForward(q);
-    final az = _azimuthDeg(pointing);
-    final el = _elevationDeg(pointing);
+    // ── 左右：X 轴水平角差分 ──────────────────
+    // ── 上下：Z 轴世界 Y 分量差分 ──────────────
+    //   worldZ.y ↑ = 锤子后仰 → 光标上移
+    //   worldZ.y ↓ = 锤子前倾 → 光标下移
+    final worldX = _rotateAxis(q, 1.0, 0.0, 0.0);
+    final worldZ = _rotateAxis(q, 0.0, 0.0, 1.0);
 
-    if (state.prevAzimuth == null) {
-      state.prevAzimuth = az;
-      state.prevElevation = el;
-      state.prevTimestamp = timestamp;
-      state.cursorX = 0.5;
-      state.cursorY = 0.5;
-      state.smoothX = 0.5;
-      state.smoothY = 0.5;
+    final xAxisAz = _azimuthDeg(worldX);
+    final zAxisWorldY = worldZ.y; // -1..1
 
-      return _buildResult(state, yaw, pitch, roll, 0.0);
+    double angVel = 0.0;
+    if (state.prevAzimuth != null) {
+      final dAz = _normDeg(xAxisAz - state.prevAzimuth!);
+      final dEl = (zAxisWorldY - state.prevElevation!) * 180.0;
+      angVel = math.sqrt(dAz*dAz + dEl*dEl) / 0.033;
     }
 
-    final dt = timestamp.difference(state.prevTimestamp!);
-    if (dt > _maxDeltaGap || dt.inMilliseconds <= 0) {
-      state.prevAzimuth = az;
-      state.prevElevation = el;
-      state.prevTimestamp = timestamp;
-      return _buildResult(state, yaw, pitch, roll, 0.0);
-    }
+    final dead = _deadZone(angVel);
+    var deltaX = _normDeg(xAxisAz - (state.prevAzimuth ?? xAxisAz));
+    var deltaY = (zAxisWorldY - (state.prevElevation ?? zAxisWorldY)) * 180.0;
+    if (deltaX.abs() < dead) deltaX = 0;
+    if (deltaY.abs() < dead) deltaY = 0;
+    deltaX = deltaX.clamp(-_maxDeltaDeg, _maxDeltaDeg);
+    deltaY = deltaY.clamp(-_maxDeltaDeg, _maxDeltaDeg);
+    // NaN 保护：快速挥动时四元数可能产生无效值
+    if (deltaX.isNaN) deltaX = 0;
+    if (deltaY.isNaN) deltaY = 0;
 
-    var deltaAz = _normalizeDeg(az - state.prevAzimuth!);
-    var deltaEl = el - state.prevElevation!;
-    final dtSec = dt.inMicroseconds / 1000000.0;
-    final angularVelocity =
-        math.sqrt((deltaAz * deltaAz) + (deltaEl * deltaEl)) / dtSec;
-    final deadZone = _deadZoneFor(angularVelocity);
-    final frameDelta = math.sqrt((deltaAz * deltaAz) + (deltaEl * deltaEl));
-    if (frameDelta < deadZone) {
-      deltaAz = 0.0;
-      deltaEl = 0.0;
+    final targetX = (state.cursorX! -
+        deltaX / (_tiltRangeX * 0.5) * 0.5 * cfg.signX)
+        .clamp(0.0, 1.0);
+    final targetY = (state.cursorY! -
+        deltaY / (_tiltRangeX * 0.5) * 0.5 * cfg.signY)
+        .clamp(0.0, 1.0);
+
+    // ── 敲击判定（多路径兜底）───────────────
+    final wAccel = _rotateAxis(
+        q, linearAccelX, linearAccelY, linearAccelZ);
+    final worldAccelY = wAccel.y;
+    // ① 滤波加速度
+    state.filtAccelY = (state.filtAccelY ?? 0) * (1.0 - _accelFilterAlpha) +
+        worldAccelY * _accelFilterAlpha;
+    final filtY = state.filtAccelY!;
+    if (filtY > _strikeAccelYThreshold) {
+      state.strikeArmed = true;
+    } else if (filtY < _strikeAccelYReset) {
+      state.strikeArmed = false;
+      state.strikeConfirmCount = 0;
+    }
+    if (state.strikeArmed == true) {
+      state.strikeConfirmCount = (state.strikeConfirmCount ?? 0) + 1;
+    }
+    final bool accelConfirmed =
+        (state.strikeConfirmCount ?? 0) >= _strikeConfirmFrames;
+
+    // ② 原始加速度 > 0.3
+    final bool rawAccelStrike = worldAccelY > 0.3;
+
+    // ③ 总加速度 > 5 m/s²
+    final double accelMag = math.sqrt(
+        linearAccelX*linearAccelX + linearAccelY*linearAccelY + linearAccelZ*linearAccelZ);
+    final bool magStrike = accelMag > 5.0;
+
+    // ④ 角速度 > 25°/s
+    const double _gestureAngVel = 25.0;
+    final bool angVelStrike = angVel > _gestureAngVel;
+
+    final bool isStriking =
+        accelConfirmed || rawAccelStrike || magStrike || angVelStrike;
+    final now = timestamp;
+    if (isStriking) {
+      state.strikeLockUntil = now.add(_strikeLock);
+      state.strikeConfirmCount = 0;
+      state.strikeArmed = false;
+      state.filtAccelY = 0;
+    }
+    final bool locked = state.strikeLockUntil != null &&
+        now.isBefore(state.strikeLockUntil!);
+
+    if (locked) {
+      // 敲击期间大幅衰减位移，减少晃动
+      state.cursorX = (state.cursorX! +
+          (targetX - state.cursorX!) * _strikeDamping)
+          .clamp(0.0, 1.0);
+      state.cursorY = (state.cursorY! +
+          (targetY - state.cursorY!) * _strikeDamping)
+          .clamp(0.0, 1.0);
     } else {
-      deltaAz = deltaAz.clamp(-_maxFrameDeltaDeg, _maxFrameDeltaDeg);
-      deltaEl = deltaEl.clamp(-_maxFrameDeltaDeg, _maxFrameDeltaDeg);
+      state.strikeLockUntil = null;
+      state.cursorX = targetX.clamp(0.0, 1.0);
+      state.cursorY = targetY.clamp(0.0, 1.0);
     }
 
-    state.cursorX = (state.cursorX! -
-            deltaAz / _degPerScreenWidth * _cursorSignX)
-        .clamp(
-      0.0,
-      1.0,
-    );
-    state.cursorY = (state.cursorY! -
-            deltaEl / _degPerScreenHeight * _cursorSignY)
-        .clamp(
-      0.0,
-      1.0,
-    );
-
-    final alpha = _alphaFor(angularVelocity);
+    final alpha = _alpha(angVel);
     state.smoothX = state.smoothX! + alpha * (state.cursorX! - state.smoothX!);
     state.smoothY = state.smoothY! + alpha * (state.cursorY! - state.smoothY!);
 
-    state.prevAzimuth = az;
-    state.prevElevation = el;
-    state.prevTimestamp = timestamp;
+    state.prevAzimuth = xAxisAz;
+    state.prevElevation = zAxisWorldY;
 
-    return _buildResult(state, yaw, pitch, roll, angularVelocity);
-  }
-
-  void recenterDevice(String deviceId) {
-    final state = _devices[deviceId];
-    if (state == null) return;
-    state.cursorX = 0.5;
-    state.cursorY = 0.5;
-    state.smoothX = 0.5;
-    state.smoothY = 0.5;
-  }
-
-  void recenterAll() {
-    for (final id in _devices.keys) {
-      recenterDevice(id);
-    }
-  }
-
-  void retainOnly(Set<String> activeDeviceIds) {
-    _devices.removeWhere((id, _) => !activeDeviceIds.contains(id));
-  }
-
-  void clear() {
-    _devices.clear();
-  }
-
-  HammerPoseProjection _buildResult(
-    _DeviceState state,
-    double yaw,
-    double pitch,
-    double roll,
-    double angularVelocity,
-  ) {
-    final point = Offset(state.smoothX ?? 0.5, state.smoothY ?? 0.5);
     return HammerPoseProjection(
-      displayPoint: point,
-      strikePoint: point,
-      relativeYawDeg: state.prevAzimuth ?? 0,
-      relativePitchDeg: state.prevElevation ?? 0,
-      relativeRollDeg: roll,
-      angularVelocity: angularVelocity,
+      displayPoint: Offset(state.smoothX!, state.smoothY!),
+      strikePoint: Offset(state.smoothX!, state.smoothY!),
+      angularVelocity: angVel,
+      isStriking: isStriking || locked,
     );
   }
 
-  static double _deadZoneFor(double angularVelocity) {
-    if (angularVelocity <= _stillAngularVelocity) {
-      return _stillDeadZoneDeg;
-    }
-    if (angularVelocity <= _slowAngularVelocity) {
-      final t =
-          (angularVelocity - _stillAngularVelocity) /
-          (_slowAngularVelocity - _stillAngularVelocity);
-      return _lerp(_stillDeadZoneDeg, _slowDeadZoneDeg, t);
-    }
-    final t =
-        ((angularVelocity - _slowAngularVelocity) /
-                (_fastAngularVelocity - _slowAngularVelocity))
-            .clamp(0.0, 1.0);
-    return _lerp(_slowDeadZoneDeg, _fastDeadZoneDeg, t);
+  void recenterDevice(String id) {
+    final s = _devices[id];
+    if (s == null) return;
+    s.cursorX=0.5; s.cursorY=0.5; s.smoothX=0.5; s.smoothY=0.5;
+    s.prevAzimuth=null; s.prevElevation=null; s.strikeLockUntil=null;
+    s.filtAccelY=null; s.strikeArmed=null; s.strikeConfirmCount=null;
   }
+  void recenterAll() { for (final id in _devices.keys) { recenterDevice(id); } }
+  void retainOnly(Set<String> ids) { _devices.removeWhere((id,_) => !ids.contains(id)); }
+  void clear() { _devices.clear(); _deviceConfigs.clear(); }
 
-  static double _alphaFor(double angularVelocity) {
-    final t = (angularVelocity / _fastAngularVelocity).clamp(0.0, 1.0);
-    return _lerp(_slowAlpha, _fastAlpha, t);
+  // ── 工具 ────────────────────────────────────
+
+  static double _deadZone(double v) {
+    if (v <= _stillAngVel) return _stillDead;
+    if (v <= 55) return _lerp(_stillDead, _slowDead,
+        (v-_stillAngVel)/(55-_stillAngVel));
+    return _lerp(_slowDead, _fastDead,
+        ((v-55)/(_fastAngVel-55)).clamp(0.0,1.0));
   }
+  static double _alpha(double v) =>
+      _lerp(_slowAlpha, _fastAlpha, (v/_fastAngVel).clamp(0.0,1.0));
+  static double _lerp(double a, double b, double t) => a+(b-a)*t;
 
-  static double _lerp(double a, double b, double t) => a + ((b - a) * t);
-
-  /// BNO085 传感器安装方向：锤子手柄指向哪个传感器轴？
-  ///
-  /// BNO085 芯片坐标系（Android 标准）：
-  ///   X — 垂直于芯片表面 / PCB 平面法线
-  ///   Y — 沿 PCB 短边
-  ///   Z — 沿 PCB 长边
-  ///
-  /// 大多数锤子安装：PCB 平放，长边沿手柄 → Z 轴指向手柄尖端。
-  /// 如果你的锤子方向不同，修改这里：
-  static const double _forwardX = 0.0;
-  static const double _forwardY = 0.0;
-  static const double _forwardZ = 1.0;
-
-  /// 方向反转修正（如果光标方向与挥动方向相反，反转对应轴）。
-  static const double _cursorSignX = -1.0;  // 水平：锤子右指→光标右移 ✅
-  static const double _cursorSignY =  1.0;  // 垂直：锤子上指→光标上移（修正镜像）
-
-  static Vector3 _rotateForward(Quaternion q) {
-    final w = q.w, x = q.x, y = q.y, z = q.z;
-    // 将锤子的"前向轴"（默认为传感器 Z 轴）旋转到世界坐标系
-    final fx = _forwardX, fy = _forwardY, fz = _forwardZ;
+  static Vector3 _rotateAxis(Quaternion q, double ax, double ay, double az) {
+    final w=q.w, x=q.x, y=q.y, z=q.z;
     return Vector3(
-      x: (1 - 2 * (y * y + z * z)) * fx +
-          (2 * (x * y - w * z)) * fy +
-          (2 * (x * z + w * y)) * fz,
-      y: (2 * (x * y + w * z)) * fx +
-          (1 - 2 * (x * x + z * z)) * fy +
-          (2 * (y * z - w * x)) * fz,
-      z: (2 * (x * z - w * y)) * fx +
-          (2 * (y * z + w * x)) * fy +
-          (1 - 2 * (x * x + y * y)) * fz,
+      x:(1-2*(y*y+z*z))*ax+(2*(x*y-w*z))*ay+(2*(x*z+w*y))*az,
+      y:(2*(x*y+w*z))*ax+(1-2*(x*x+z*z))*ay+(2*(y*z-w*x))*az,
+      z:(2*(x*z-w*y))*ax+(2*(y*z+w*x))*ay+(1-2*(x*x+y*y))*az,
     );
   }
-
-  static double _azimuthDeg(Vector3 v) {
-    return math.atan2(v.y, v.x) * 180.0 / math.pi;
+  static double _azimuthDeg(Vector3 v) => math.atan2(v.y, v.x)*180.0/math.pi;
+  static double _normDeg(double d) {
+    var v=d%360; if(v>180)v-=360; if(v<-180)v+=360; return v;
   }
-
-  static double _elevationDeg(Vector3 v) {
-    final horiz = math.sqrt(v.x * v.x + v.y * v.y);
-    return math.atan2(v.z, horiz) * 180.0 / math.pi;
-  }
-
-  static Quaternion _quatFromEuler(
-    double yawDeg,
-    double pitchDeg,
-    double rollDeg,
-  ) {
-    final y = yawDeg * math.pi / 360.0;
-    final p = pitchDeg * math.pi / 360.0;
-    final r = rollDeg * math.pi / 360.0;
-    final cy = math.cos(y), sy = math.sin(y);
-    final cp = math.cos(p), sp = math.sin(p);
-    final cr = math.cos(r), sr = math.sin(r);
-    return Quaternion(
-      w: cr * cp * cy + sr * sp * sy,
-      x: sr * cp * cy - cr * sp * sy,
-      y: cr * sp * cy + sr * cp * sy,
-      z: cr * cp * sy - sr * sp * cy,
-    );
-  }
-
-  static double _normalizeDeg(double deg) {
-    var v = deg % 360.0;
-    if (v > 180.0) v -= 360.0;
-    if (v < -180.0) v += 360.0;
-    return v;
+  static Quaternion _quatFromEuler(double y, double p, double r) {
+    y*=math.pi/360;p*=math.pi/360;r*=math.pi/360;
+    final cy=math.cos(y),sy=math.sin(y),cp=math.cos(p),sp=math.sin(p),
+          cr=math.cos(r),sr=math.sin(r);
+    return Quaternion(w:cr*cp*cy+sr*sp*sy, x:sr*cp*cy-cr*sp*sy,
+        y:cr*sp*cy+sr*cp*sy, z:cr*cp*sy-sr*sp*cy);
   }
 }
 
 class _DeviceState {
-  double? prevAzimuth;
-  double? prevElevation;
-  DateTime? prevTimestamp;
-  double? cursorX;
-  double? cursorY;
-  double? smoothX;
-  double? smoothY;
-  DateTime? lastSeen;
-
-  void reset() {
-    prevAzimuth = null;
-    prevElevation = null;
-    prevTimestamp = null;
-    cursorX = 0.5;
-    cursorY = 0.5;
-    smoothX = 0.5;
-    smoothY = 0.5;
-  }
+  double? cursorX, cursorY, smoothX, smoothY;
+  double? prevAzimuth, prevElevation;
+  double? filtAccelY;
+  bool? strikeArmed;
+  int? strikeConfirmCount;
+  DateTime? lastSeen, strikeLockUntil;
 }

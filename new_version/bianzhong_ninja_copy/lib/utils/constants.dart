@@ -45,7 +45,7 @@ class AppConstants {
   static const double bellSize = 50.0;
   static const double bellSpacing = 8.0;
   static const double minUiStrikeIntensity = 0.12;
-  static const Duration uiStrikeDebounce = Duration(milliseconds: 180);
+  static const Duration uiStrikeDebounce = Duration(milliseconds: 30);
   static const Duration bellHighlightDuration = Duration(milliseconds: 300);
   static const Duration stageRefreshInterval = Duration(milliseconds: 33);
   static const Duration sideStrikeHoverLockDelay = Duration(seconds: 1);
