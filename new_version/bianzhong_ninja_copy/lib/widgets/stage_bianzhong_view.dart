@@ -13,8 +13,8 @@ const double _stageBellWidthRatio = 0.124;
 const double _stageBellHeightRatio = 0.34;
 const double _stageUpperRowTopRatio = 0.08;
 const double _stageLowerRowTopRatio = 0.54;
-const double _stageUpperBeamTopInsetRatio = -0.070;
-const double _stageLowerBeamTopInsetRatio = -0.086;
+const double _stageUpperBeamTopInsetRatio = -0.056;
+const double _stageLowerBeamTopInsetRatio = -0.056;
 const double _stageBeamHeightRatio = 0.064;
 
 class _BianzhongRackPainter extends CustomPainter {
@@ -26,19 +26,13 @@ class _BianzhongRackPainter extends CustomPainter {
     final beamShader = const LinearGradient(
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
-      colors: [
-        Color(0xffc4956a),
-        Color(0xffa67c55),
-      ],
+      colors: [Color(0xffc4956a), Color(0xffa67c55)],
     ).createShader(shaderRect);
     final beamPaint = Paint()..shader = beamShader;
 
     void drawBeam(Rect rect) {
       canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          rect,
-          Radius.circular(size.width * 0.008),
-        ),
+        RRect.fromRectAndRadius(rect, Radius.circular(size.width * 0.008)),
         beamPaint,
       );
     }
@@ -71,6 +65,7 @@ class _BianzhongBellPainter extends CustomPainter {
   final bool isFollowCurrent;
   final int notePulse;
   final bool flashActive;
+  final bool drawBody;
 
   const _BianzhongBellPainter({
     required this.isActive,
@@ -78,6 +73,7 @@ class _BianzhongBellPainter extends CustomPainter {
     this.isFollowCurrent = false,
     this.notePulse = 0,
     this.flashActive = false,
+    this.drawBody = true,
   });
 
   Set<StageStrikeRegion> get _effectiveHighlightedRegions =>
@@ -87,63 +83,99 @@ class _BianzhongBellPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final width = size.width;
     final height = size.height;
+    if (!drawBody) {
+      _drawStrikeRegions(
+        canvas,
+        Rect.fromLTWH(width * 0.10, height * 0.29, width * 0.80, height * 0.62),
+      );
+      return;
+    }
+
     final bellRect = Rect.fromLTWH(
-      width * 0.08,
-      height * 0.11,
-      width * 0.84,
-      height * 0.84,
+      width * 0.07,
+      height * 0.20,
+      width * 0.86,
+      height * 0.74,
     );
     final shell = _buildShellPath(bellRect);
-    final cavity = _buildCavityPath(bellRect);
-    final body = Path.combine(PathOperation.difference, shell, cavity);
 
     canvas.drawShadow(
       shell,
-      Colors.black.withValues(alpha: 0.34),
-      width * 0.12,
+      const Color(0xff241006).withValues(alpha: 0.48),
+      width * 0.10,
       false,
     );
 
     final bodyPaint = Paint()
       ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
         colors: isFollowCurrent
             ? const [
-                Color(0xfffff176),
-                Color(0xffffc107),
-                Color(0xffff8f00),
+                Color(0xfffff3b0),
+                Color(0xffffce62),
+                Color(0xffcf7817),
+                Color(0xff6f350b),
               ]
             : isActive
             ? const [
-                Color(0xfff0cb85),
-                Color(0xffcb8f46),
-                Color(0xff7f4b24),
+                Color(0xffffdc82),
+                Color(0xffe6a13c),
+                Color(0xff9a5213),
+                Color(0xff4b2308),
               ]
             : const [
-                Color(0xffb08658),
-                Color(0xff7b5330),
-                Color(0xff35221b),
+                Color(0xffefbd61),
+                Color(0xffc47b24),
+                Color(0xff81420f),
+                Color(0xff3b1b07),
               ],
+        stops: const [0.0, 0.28, 0.66, 1.0],
       ).createShader(bellRect);
-    canvas.drawPath(body, bodyPaint);
+    canvas.drawPath(shell, bodyPaint);
+
+    canvas.save();
+    canvas.clipPath(shell);
+    _drawBronzeTexture(canvas, bellRect);
+    canvas.drawRect(
+      Rect.fromLTWH(
+        bellRect.left,
+        bellRect.top + bellRect.height * 0.84,
+        bellRect.width,
+        bellRect.height * 0.16,
+      ),
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0x00773d0d), Color(0xaa3a1905)],
+        ).createShader(bellRect),
+    );
+    canvas.restore();
 
     if (flashActive) {
       canvas.drawPath(
-        body,
-        Paint()..color = Colors.white.withValues(alpha: 0.55),
+        shell,
+        Paint()..color = const Color(0xfffff1c2).withValues(alpha: 0.48),
       );
     }
 
     final edgePaint = Paint()
-      ..color = isFollowCurrent
-          ? const Color(0xffffee58)
-          : isActive
-          ? const Color(0xffffebbf)
-          : const Color(0xffd0b08a)
+      ..color = const Color(0xff4a2309)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = width * 0.020;
+      ..strokeWidth = width * 0.018
+      ..strokeJoin = StrokeJoin.round;
     canvas.drawPath(shell, edgePaint);
+    canvas.drawPath(
+      shell,
+      Paint()
+        ..color = (isFollowCurrent || isActive)
+            ? const Color(0xffffe6a2)
+            : const Color(0xfff3c875).withValues(alpha: 0.78)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = width * 0.006
+        ..strokeJoin = StrokeJoin.round,
+    );
 
     _drawHandle(canvas, bellRect);
     _drawUpperBands(canvas, bellRect);
@@ -155,292 +187,417 @@ class _BianzhongBellPainter extends CustomPainter {
 
   Path _buildShellPath(Rect rect) {
     return Path()
-      ..moveTo(rect.left + rect.width * 0.18, rect.top + rect.height * 0.05)
+      ..moveTo(rect.left + rect.width * 0.12, rect.top + rect.height * 0.06)
       ..quadraticBezierTo(
         rect.left + rect.width * 0.50,
-        rect.top,
-        rect.left + rect.width * 0.82,
-        rect.top + rect.height * 0.05,
-      )
-      ..lineTo(rect.left + rect.width * 0.84, rect.top + rect.height * 0.17)
-      ..quadraticBezierTo(
-        rect.left + rect.width * 0.83,
-        rect.top + rect.height * 0.36,
+        rect.top + rect.height * 0.015,
         rect.left + rect.width * 0.88,
-        rect.top + rect.height * 0.60,
+        rect.top + rect.height * 0.06,
       )
       ..quadraticBezierTo(
-        rect.left + rect.width * 0.91,
-        rect.top + rect.height * 0.77,
         rect.left + rect.width * 0.96,
-        rect.top + rect.height * 0.97,
+        rect.top + rect.height * 0.11,
+        rect.left + rect.width * 0.96,
+        rect.top + rect.height * 0.23,
       )
-      ..lineTo(rect.left + rect.width * 0.74, rect.top + rect.height * 0.985)
       ..quadraticBezierTo(
-        rect.left + rect.width * 0.50,
-        rect.top + rect.height * 0.91,
-        rect.left + rect.width * 0.26,
-        rect.top + rect.height * 0.985,
-      )
-      ..lineTo(rect.left + rect.width * 0.04, rect.top + rect.height * 0.97)
-      ..quadraticBezierTo(
-        rect.left + rect.width * 0.09,
-        rect.top + rect.height * 0.77,
-        rect.left + rect.width * 0.12,
+        rect.left + rect.width * 0.94,
         rect.top + rect.height * 0.60,
+        rect.left + rect.width * 0.91,
+        rect.top + rect.height * 0.94,
       )
       ..quadraticBezierTo(
-        rect.left + rect.width * 0.17,
-        rect.top + rect.height * 0.36,
-        rect.left + rect.width * 0.16,
-        rect.top + rect.height * 0.17,
+        rect.left + rect.width * 0.88,
+        rect.bottom,
+        rect.left + rect.width * 0.80,
+        rect.bottom,
       )
-      ..close();
-  }
-
-  Path _buildCavityPath(Rect rect) {
-    return Path()
-      ..moveTo(rect.left + rect.width * 0.25, rect.top + rect.height * 0.98)
       ..quadraticBezierTo(
-        rect.left + rect.width * 0.35,
-        rect.top + rect.height * 0.78,
         rect.left + rect.width * 0.50,
-        rect.top + rect.height * 0.70,
+        rect.bottom + rect.height * 0.018,
+        rect.left + rect.width * 0.20,
+        rect.bottom,
       )
       ..quadraticBezierTo(
-        rect.left + rect.width * 0.65,
-        rect.top + rect.height * 0.78,
-        rect.left + rect.width * 0.75,
-        rect.top + rect.height * 0.98,
+        rect.left + rect.width * 0.12,
+        rect.bottom,
+        rect.left + rect.width * 0.09,
+        rect.top + rect.height * 0.94,
+      )
+      ..quadraticBezierTo(
+        rect.left + rect.width * 0.06,
+        rect.top + rect.height * 0.60,
+        rect.left + rect.width * 0.04,
+        rect.top + rect.height * 0.23,
+      )
+      ..quadraticBezierTo(
+        rect.left + rect.width * 0.04,
+        rect.top + rect.height * 0.11,
+        rect.left + rect.width * 0.12,
+        rect.top + rect.height * 0.06,
       )
       ..close();
   }
 
   void _drawHandle(Canvas canvas, Rect rect) {
-    final handlePaint = Paint()
-      ..shader = const LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          Color(0xff685045),
-          Color(0xff3f312c),
-        ],
-      ).createShader(
-        Rect.fromLTWH(
-          rect.left + rect.width * 0.38,
-          rect.top - rect.height * 0.12,
-          rect.width * 0.24,
-          rect.height * 0.18,
-        ),
+    final crownRect = Rect.fromLTWH(
+      rect.left + rect.width * 0.04,
+      rect.top - rect.height * 0.23,
+      rect.width * 0.92,
+      rect.height * 0.30,
+    );
+    final bronzeShader = LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: isActive || isFollowCurrent
+          ? const [Color(0xffffe08b), Color(0xffd58b2c), Color(0xff6a310b)]
+          : const [Color(0xffe4ad50), Color(0xffad651a), Color(0xff4d2208)],
+    ).createShader(crownRect);
+    final crownPaint = Paint()
+      ..shader = bronzeShader
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = rect.width * 0.052
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    final crownHighlightPaint = Paint()
+      ..color = const Color(0xffffd980).withValues(alpha: 0.72)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = rect.width * 0.012
+      ..strokeCap = StrokeCap.round;
+
+    void drawCreature({required bool mirror}) {
+      canvas.save();
+      if (mirror) {
+        canvas.translate(rect.center.dx * 2, 0);
+        canvas.scale(-1, 1);
+      }
+      final path = Path()
+        ..moveTo(rect.center.dx - rect.width * 0.02, rect.top)
+        ..cubicTo(
+          rect.center.dx - rect.width * 0.10,
+          rect.top - rect.height * 0.02,
+          rect.center.dx - rect.width * 0.08,
+          rect.top - rect.height * 0.17,
+          rect.center.dx - rect.width * 0.20,
+          rect.top - rect.height * 0.18,
+        )
+        ..cubicTo(
+          rect.center.dx - rect.width * 0.31,
+          rect.top - rect.height * 0.19,
+          rect.center.dx - rect.width * 0.27,
+          rect.top - rect.height * 0.05,
+          rect.center.dx - rect.width * 0.36,
+          rect.top - rect.height * 0.04,
+        )
+        ..cubicTo(
+          rect.center.dx - rect.width * 0.44,
+          rect.top - rect.height * 0.03,
+          rect.center.dx - rect.width * 0.44,
+          rect.top - rect.height * 0.13,
+          rect.center.dx - rect.width * 0.38,
+          rect.top - rect.height * 0.14,
+        );
+      canvas.drawPath(path, crownPaint);
+      canvas.drawPath(
+        path.shift(Offset(0, -rect.height * 0.006)),
+        crownHighlightPaint,
       );
+      canvas.drawCircle(
+        Offset(
+          rect.center.dx - rect.width * 0.115,
+          rect.top - rect.height * 0.155,
+        ),
+        rect.width * 0.052,
+        Paint()..shader = bronzeShader,
+      );
+      canvas.drawCircle(
+        Offset(
+          rect.center.dx - rect.width * 0.098,
+          rect.top - rect.height * 0.17,
+        ),
+        rect.width * 0.010,
+        Paint()..color = const Color(0xff351506),
+      );
+      canvas.drawArc(
+        Rect.fromCircle(
+          center: Offset(
+            rect.center.dx - rect.width * 0.36,
+            rect.top - rect.height * 0.105,
+          ),
+          radius: rect.width * 0.075,
+        ),
+        math.pi * 0.08,
+        math.pi * 1.45,
+        false,
+        crownHighlightPaint,
+      );
+      canvas.restore();
+    }
+
+    drawCreature(mirror: false);
+    drawCreature(mirror: true);
+
+    final ringRect = Rect.fromCenter(
+      center: Offset(rect.center.dx, rect.top - rect.height * 0.18),
+      width: rect.width * 0.22,
+      height: rect.height * 0.18,
+    );
+    canvas.drawOval(
+      ringRect,
+      Paint()
+        ..shader = bronzeShader
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = rect.width * 0.042,
+    );
 
     final strapRect = Rect.fromLTWH(
-      rect.left + rect.width * 0.435,
-      rect.top - rect.height * 0.28,
-      rect.width * 0.13,
-      rect.height * 0.34,
+      rect.left + rect.width * 0.465,
+      rect.top - rect.height * 0.25,
+      rect.width * 0.07,
+      rect.height * 0.30,
     );
     canvas.drawRRect(
-      RRect.fromRectAndRadius(strapRect, Radius.circular(rect.width * 0.03)),
-      handlePaint,
+      RRect.fromRectAndRadius(strapRect, Radius.circular(rect.width * 0.018)),
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [Color(0xff3b1907), Color(0xff9c5a1b), Color(0xff321305)],
+        ).createShader(strapRect),
     );
 
-    final beamRect = Rect.fromLTWH(
-      rect.left + rect.width * 0.26,
-      rect.top - rect.height * 0.045,
-      rect.width * 0.48,
-      rect.height * 0.11,
+    final crownBaseRect = Rect.fromLTWH(
+      rect.left + rect.width * 0.06,
+      rect.top - rect.height * 0.015,
+      rect.width * 0.88,
+      rect.height * 0.09,
     );
     canvas.drawRRect(
-      RRect.fromRectAndRadius(beamRect, Radius.circular(rect.width * 0.05)),
-      handlePaint,
+      RRect.fromRectAndRadius(
+        crownBaseRect,
+        Radius.circular(rect.width * 0.025),
+      ),
+      Paint()..shader = bronzeShader,
     );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        crownBaseRect,
+        Radius.circular(rect.width * 0.025),
+      ),
+      Paint()
+        ..color = const Color(0xffffd77a).withValues(alpha: 0.58)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = rect.width * 0.010,
+    );
+  }
 
-    final ringRect = Rect.fromLTWH(
-      rect.left + rect.width * 0.45,
-      rect.top + rect.height * 0.01,
-      rect.width * 0.10,
-      rect.height * 0.12,
-    );
-    final ringPaint = Paint()
-      ..color = const Color(0xff43342f)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = rect.width * 0.028;
-    canvas.drawArc(ringRect, 0, math.pi, false, ringPaint);
+  void _drawBronzeTexture(Canvas canvas, Rect rect) {
+    for (int index = 0; index < 42; index++) {
+      final xRatio = 0.05 + ((index * 37) % 97) / 108;
+      final yRatio = 0.05 + ((index * 53 + 17) % 101) / 112;
+      final center = Offset(
+        rect.left + rect.width * xRatio,
+        rect.top + rect.height * yRatio,
+      );
+      final radius = rect.width * (0.0025 + (index % 4) * 0.0014);
+      canvas.drawCircle(
+        center,
+        radius,
+        Paint()
+          ..color =
+              (index.isEven ? const Color(0xff4a2308) : const Color(0xffffd06b))
+                  .withValues(alpha: index.isEven ? 0.24 : 0.18),
+      );
+    }
   }
 
   void _drawUpperBands(Canvas canvas, Rect rect) {
     final bandPaint = Paint()
-      ..color = const Color(0xffcab197).withValues(alpha: 0.68)
+      ..color = const Color(0xffffcf70).withValues(alpha: 0.82)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = rect.width * 0.012;
+      ..strokeWidth = rect.width * 0.015;
 
     final accentPaint = Paint()
-      ..color = const Color(0xff2a1a14).withValues(alpha: 0.48)
+      ..color = const Color(0xff542507).withValues(alpha: 0.72)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = rect.width * 0.006;
+      ..strokeWidth = rect.width * 0.008;
 
-    final bandRows = <double>[0.20, 0.31, 0.43, 0.55];
+    final bandRows = <double>[0.13, 0.33, 0.52, 0.70];
     for (final t in bandRows) {
       final y = rect.top + rect.height * t;
       final path = Path()
-        ..moveTo(rect.left + rect.width * 0.10, y)
+        ..moveTo(rect.left + rect.width * 0.065, y)
         ..quadraticBezierTo(
           rect.left + rect.width * 0.50,
-          y - rect.height * 0.025,
-          rect.left + rect.width * 0.90,
+          y - rect.height * 0.010,
+          rect.left + rect.width * 0.935,
           y,
         );
+      canvas.drawPath(path.shift(Offset(0, rect.height * 0.008)), accentPaint);
       canvas.drawPath(path, bandPaint);
-      canvas.drawPath(path.shift(Offset(0, rect.height * 0.012)), accentPaint);
+    }
+
+    final reliefPaint = Paint()
+      ..color = const Color(0xff5f2b09).withValues(alpha: 0.58)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = rect.width * 0.008
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    for (int index = 0; index < 10; index++) {
+      final x = rect.left + rect.width * (0.09 + index * 0.084);
+      final y = rect.top + rect.height * 0.085;
+      final motif = Path()
+        ..moveTo(x, y + rect.height * 0.022)
+        ..lineTo(x + rect.width * 0.018, y)
+        ..lineTo(x + rect.width * 0.040, y + rect.height * 0.020)
+        ..lineTo(x + rect.width * 0.022, y + rect.height * 0.045)
+        ..lineTo(x + rect.width * 0.050, y + rect.height * 0.057);
+      canvas.drawPath(motif, reliefPaint);
     }
   }
 
   void _drawStudRows(Canvas canvas, Rect rect) {
-    final studPaint = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          isActive ? const Color(0xffffe2a5) : const Color(0xffd9c4af),
-          const Color(0xff5d4638),
-        ],
-      ).createShader(
-        Rect.fromCircle(
-          center: Offset(rect.center.dx, rect.center.dy),
-          radius: rect.width * 0.05,
-        ),
-      );
-    final armPaint = Paint()
-      ..color = const Color(0xff5e483a)
-      ..strokeWidth = rect.width * 0.015
-      ..strokeCap = StrokeCap.round;
-
-    final rows = <double>[0.22, 0.33, 0.45, 0.57];
-    final columns = <double>[0.16, 0.28, 0.40];
+    final rows = <double>[0.23, 0.42, 0.61];
+    final columns = <double>[0.14, 0.26, 0.36];
     for (final row in rows) {
       final y = rect.top + rect.height * row;
       for (final x in columns) {
         final leftCenter = Offset(rect.left + rect.width * x, y);
         final rightCenter = Offset(rect.right - rect.width * x, y);
-        canvas.drawLine(
-          leftCenter.translate(-rect.width * 0.06, 0),
-          leftCenter,
-          armPaint,
-        );
-        canvas.drawLine(
-          rightCenter,
-          rightCenter.translate(rect.width * 0.06, 0),
-          armPaint,
-        );
-        canvas.drawCircle(leftCenter, rect.width * 0.036, studPaint);
-        canvas.drawCircle(rightCenter, rect.width * 0.036, studPaint);
+        _drawStud(canvas, rect, leftCenter);
+        _drawStud(canvas, rect, rightCenter);
       }
     }
   }
 
+  void _drawStud(Canvas canvas, Rect rect, Offset center) {
+    final radius = rect.width * 0.036;
+    canvas.drawCircle(
+      center.translate(radius * 0.22, radius * 0.30),
+      radius * 1.08,
+      Paint()..color = const Color(0xff351506).withValues(alpha: 0.58),
+    );
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..shader = RadialGradient(
+          center: const Alignment(-0.35, -0.45),
+          colors: [
+            isActive || isFollowCurrent
+                ? const Color(0xffffe59a)
+                : const Color(0xffffc963),
+            const Color(0xffa75e16),
+            const Color(0xff4b2007),
+          ],
+          stops: const [0.0, 0.55, 1.0],
+        ).createShader(Rect.fromCircle(center: center, radius: radius)),
+    );
+    final spiralPaint = Paint()
+      ..color = const Color(0xff5c2808).withValues(alpha: 0.84)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = rect.width * 0.007
+      ..strokeCap = StrokeCap.round;
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius * 0.66),
+      -math.pi * 0.35,
+      math.pi * 1.62,
+      false,
+      spiralPaint,
+    );
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius * 0.34),
+      math.pi * 0.05,
+      math.pi * 1.42,
+      false,
+      spiralPaint,
+    );
+  }
+
   void _drawCenterPlaque(Canvas canvas, Rect rect) {
     final plaquePath = Path()
-      ..moveTo(rect.left + rect.width * 0.42, rect.top + rect.height * 0.12)
-      ..lineTo(rect.left + rect.width * 0.58, rect.top + rect.height * 0.12)
-      ..lineTo(rect.left + rect.width * 0.55, rect.top + rect.height * 0.60)
-      ..lineTo(rect.left + rect.width * 0.45, rect.top + rect.height * 0.60)
+      ..moveTo(rect.left + rect.width * 0.405, rect.top + rect.height * 0.145)
+      ..lineTo(rect.left + rect.width * 0.595, rect.top + rect.height * 0.145)
+      ..lineTo(rect.left + rect.width * 0.575, rect.top + rect.height * 0.675)
+      ..lineTo(rect.left + rect.width * 0.425, rect.top + rect.height * 0.675)
       ..close();
 
     final plaquePaint = Paint()
       ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          const Color(0xff8f6a45),
-          const Color(0xff523726),
-        ],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: const [Color(0xffffd67a), Color(0xffd8932f), Color(0xff8f4c12)],
       ).createShader(rect);
     canvas.drawPath(plaquePath, plaquePaint);
     canvas.drawPath(
       plaquePath,
       Paint()
-        ..color = const Color(0xffd8c0a4).withValues(alpha: 0.55)
+        ..color = const Color(0xff5a2708).withValues(alpha: 0.82)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = rect.width * 0.010,
+        ..strokeWidth = rect.width * 0.018,
+    );
+    canvas.drawPath(
+      plaquePath,
+      Paint()
+        ..color = const Color(0xffffe3a1).withValues(alpha: 0.62)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = rect.width * 0.006,
     );
 
-    final glyphPaint = Paint()
-      ..color = const Color(0xff1a120d).withValues(alpha: 0.70)
+    final weatheringPaint = Paint()
+      ..color = const Color(0xff71370d).withValues(alpha: 0.30)
       ..strokeWidth = rect.width * 0.005
       ..strokeCap = StrokeCap.round;
-    for (int index = 0; index < 6; index++) {
-      final y = rect.top + rect.height * (0.18 + index * 0.065);
+    for (int index = 0; index < 7; index++) {
+      final y = rect.top + rect.height * (0.20 + index * 0.062);
+      final insetRatio = 0.445 + (index % 2) * 0.02;
       canvas.drawLine(
-        Offset(rect.left + rect.width * 0.48, y),
-        Offset(rect.left + rect.width * 0.52, y + rect.height * 0.03),
-        glyphPaint,
-      );
-      canvas.drawLine(
-        Offset(rect.left + rect.width * 0.52, y),
-        Offset(rect.left + rect.width * 0.48, y + rect.height * 0.03),
-        glyphPaint,
+        Offset(rect.left + rect.width * insetRatio, y),
+        Offset(rect.right - rect.width * insetRatio, y + rect.height * 0.012),
+        weatheringPaint,
       );
     }
   }
 
   void _drawLowerPatterns(Canvas canvas, Rect rect) {
+    final panelRect = Rect.fromLTWH(
+      rect.left + rect.width * 0.10,
+      rect.top + rect.height * 0.72,
+      rect.width * 0.80,
+      rect.height * 0.17,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(panelRect, Radius.circular(rect.width * 0.018)),
+      Paint()..color = const Color(0xff6b300a).withValues(alpha: 0.32),
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(panelRect, Radius.circular(rect.width * 0.018)),
+      Paint()
+        ..color = const Color(0xffffc65d).withValues(alpha: 0.48)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = rect.width * 0.010,
+    );
+
     final patternPaint = Paint()
-      ..color = const Color(0xffc9ad87).withValues(alpha: 0.26)
+      ..color = const Color(0xff542306).withValues(alpha: 0.70)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = rect.width * 0.014;
+      ..strokeWidth = rect.width * 0.007
+      ..strokeCap = StrokeCap.square
+      ..strokeJoin = StrokeJoin.miter;
 
-    final centerX = rect.center.dx;
-    final topY = rect.top + rect.height * 0.64;
-    final bottomY = rect.top + rect.height * 0.83;
-
-    canvas.drawLine(
-      Offset(centerX, topY),
-      Offset(centerX, bottomY),
-      patternPaint,
-    );
-    canvas.drawArc(
-      Rect.fromCenter(
-        center: Offset(centerX, topY + rect.height * 0.05),
-        width: rect.width * 0.26,
-        height: rect.height * 0.12,
-      ),
-      math.pi * 0.12,
-      math.pi * 0.76,
-      false,
-      patternPaint,
-    );
-    canvas.drawArc(
-      Rect.fromCenter(
-        center: Offset(centerX, topY + rect.height * 0.05),
-        width: rect.width * 0.26,
-        height: rect.height * 0.12,
-      ),
-      math.pi * 1.12,
-      math.pi * 0.76,
-      false,
-      patternPaint,
-    );
-    canvas.drawArc(
-      Rect.fromCenter(
-        center: Offset(centerX, bottomY - rect.height * 0.03),
-        width: rect.width * 0.42,
-        height: rect.height * 0.16,
-      ),
-      math.pi * 1.10,
-      math.pi * 0.80,
-      false,
-      patternPaint,
-    );
-    canvas.drawArc(
-      Rect.fromCenter(
-        center: Offset(centerX, bottomY - rect.height * 0.03),
-        width: rect.width * 0.42,
-        height: rect.height * 0.16,
-      ),
-      math.pi * 0.10,
-      math.pi * 0.80,
-      false,
-      patternPaint,
-    );
+    for (int row = 0; row < 3; row++) {
+      for (int column = 0; column < 8; column++) {
+        final x = panelRect.left + panelRect.width * (0.035 + column * 0.12);
+        final y = panelRect.top + panelRect.height * (0.18 + row * 0.28);
+        final motif = Path()
+          ..moveTo(x, y)
+          ..lineTo(x + panelRect.width * 0.045, y)
+          ..lineTo(x + panelRect.width * 0.045, y + panelRect.height * 0.14)
+          ..lineTo(x + panelRect.width * 0.075, y + panelRect.height * 0.14)
+          ..lineTo(x + panelRect.width * 0.075, y + panelRect.height * 0.25);
+        canvas.drawPath(motif, patternPaint);
+      }
+    }
   }
 
   void _drawStrikeRegions(Canvas canvas, Rect rect) {
@@ -456,14 +613,14 @@ class _BianzhongBellPainter extends CustomPainter {
     );
 
     final glowPaint = Paint()
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7);
 
     _paintStrikeRegion(
       canvas: canvas,
       path: strikeLayout.leftPath,
       glowPaint: glowPaint,
-      fillColor: const Color(0xff59cbff),
-      edgeColor: const Color(0xffd9f7ff),
+      fillColor: const Color(0xff9b5918),
+      edgeColor: const Color(0xffffce72),
       isHighlighted: highlightLeft,
       strokeWidth: rect.width * 0.017,
     );
@@ -471,8 +628,8 @@ class _BianzhongBellPainter extends CustomPainter {
       canvas: canvas,
       path: strikeLayout.rightPath,
       glowPaint: glowPaint,
-      fillColor: const Color(0xff59cbff),
-      edgeColor: const Color(0xffd9f7ff),
+      fillColor: const Color(0xff9b5918),
+      edgeColor: const Color(0xffffce72),
       isHighlighted: highlightRight,
       strokeWidth: rect.width * 0.017,
     );
@@ -480,38 +637,10 @@ class _BianzhongBellPainter extends CustomPainter {
       canvas: canvas,
       path: strikeLayout.centerPath,
       glowPaint: glowPaint,
-      fillColor: const Color(0xffff9732),
-      edgeColor: const Color(0xffffe2b0),
+      fillColor: const Color(0xffc87924),
+      edgeColor: const Color(0xffffe3a5),
       isHighlighted: highlightCenter,
       strokeWidth: rect.width * 0.017,
-    );
-
-    _paintStrikeLabel(
-      canvas: canvas,
-      label: '侧',
-      center: Offset(
-        strikeLayout.leftRect.center.dx + rect.width * 0.01,
-        strikeLayout.leftRect.center.dy,
-      ),
-      fontSize: rect.width * 0.13,
-    );
-    _paintStrikeLabel(
-      canvas: canvas,
-      label: '侧',
-      center: Offset(
-        strikeLayout.rightRect.center.dx - rect.width * 0.01,
-        strikeLayout.rightRect.center.dy,
-      ),
-      fontSize: rect.width * 0.13,
-    );
-    _paintStrikeLabel(
-      canvas: canvas,
-      label: '正',
-      center: Offset(
-        strikeLayout.centerRect.center.dx,
-        strikeLayout.centerRect.center.dy + rect.height * 0.035,
-      ),
-      fontSize: rect.width * 0.14,
     );
   }
 
@@ -524,16 +653,18 @@ class _BianzhongBellPainter extends CustomPainter {
     required bool isHighlighted,
     required double strokeWidth,
   }) {
-    glowPaint.color = fillColor.withValues(alpha: isHighlighted ? 0.78 : 0.42);
-    canvas.drawPath(path, glowPaint);
+    if (isHighlighted) {
+      glowPaint.color = edgeColor.withValues(alpha: 0.58);
+      canvas.drawPath(path, glowPaint);
+    }
 
     final fillPaint = Paint()
-      ..color = fillColor.withValues(alpha: isHighlighted ? 0.84 : 0.56)
+      ..color = fillColor.withValues(alpha: isHighlighted ? 0.34 : 0.045)
       ..style = PaintingStyle.fill;
     canvas.drawPath(path, fillPaint);
 
     final edgePaint = Paint()
-      ..color = edgeColor.withValues(alpha: isHighlighted ? 1.0 : 0.92)
+      ..color = edgeColor.withValues(alpha: isHighlighted ? 0.96 : 0.14)
       ..style = PaintingStyle.stroke
       ..strokeWidth = isHighlighted ? strokeWidth * 1.45 : strokeWidth;
     canvas.drawPath(path, edgePaint);
@@ -545,33 +676,9 @@ class _BianzhongBellPainter extends CustomPainter {
     canvas.drawPath(
       path,
       Paint()
-        ..color = Colors.white.withValues(alpha: 0.90)
+        ..color = const Color(0xfffff0c7).withValues(alpha: 0.92)
         ..style = PaintingStyle.stroke
         ..strokeWidth = strokeWidth * 0.52,
-    );
-  }
-
-  void _paintStrikeLabel({
-    required Canvas canvas,
-    required String label,
-    required Offset center,
-    required double fontSize,
-  }) {
-    final textPainter = TextPainter(
-      text: TextSpan(
-        text: label,
-        style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.96),
-          fontSize: fontSize,
-          fontWeight: FontWeight.w800,
-          height: 1.0,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    textPainter.paint(
-      canvas,
-      Offset(center.dx - textPainter.width / 2, center.dy - textPainter.height / 2),
     );
   }
 
@@ -583,10 +690,9 @@ class _BianzhongBellPainter extends CustomPainter {
         oldDelegate.isFollowCurrent != isFollowCurrent ||
         oldDelegate.notePulse != notePulse ||
         oldDelegate.flashActive != flashActive ||
+        oldDelegate.drawBody != drawBody ||
         previousRegions.length != currentRegions.length ||
-        previousRegions.any(
-          (region) => !currentRegions.contains(region),
-        );
+        previousRegions.any((region) => !currentRegions.contains(region));
   }
 }
 
@@ -596,10 +702,7 @@ class _HammerPainter extends CustomPainter {
   static const double headCenterDxRatio = 0.50;
   static const double headCenterDyRatio = 0.14;
 
-  const _HammerPainter({
-    required this.accent,
-    required this.isStrike,
-  });
+  const _HammerPainter({required this.accent, required this.isStrike});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -614,22 +717,19 @@ class _HammerPainter extends CustomPainter {
       Radius.circular(size.width * 0.05),
     );
     final shaftPaint = Paint()
-      ..shader = const LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          Color(0xffead6ad),
-          Color(0xffb98f61),
-          Color(0xff6d4a2b),
-        ],
-      ).createShader(
-        Rect.fromLTWH(
-          size.width * 0.40,
-          size.height * 0.16,
-          size.width * 0.20,
-          size.height * 0.66,
-        ),
-      );
+      ..shader =
+          const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xffead6ad), Color(0xffb98f61), Color(0xff6d4a2b)],
+          ).createShader(
+            Rect.fromLTWH(
+              size.width * 0.40,
+              size.height * 0.16,
+              size.width * 0.20,
+              size.height * 0.66,
+            ),
+          );
     canvas.drawRRect(shaftRect, shaftPaint);
 
     final headRect = RRect.fromRectAndRadius(
@@ -675,8 +775,7 @@ class _HammerPainter extends CustomPainter {
     canvas.drawCircle(
       headCenter,
       size.width * 0.055,
-      Paint()
-        ..color = Colors.white.withValues(alpha: isStrike ? 0.92 : 0.72),
+      Paint()..color = Colors.white.withValues(alpha: isStrike ? 0.92 : 0.72),
     );
     canvas.drawCircle(
       headCenter,
@@ -715,11 +814,7 @@ class StageBianzhongView extends StatefulWidget {
   final Map<String, BladeTrail> bladeTrails;
   final int? followAlongCurrentBellId;
   final int followAlongNotePulse;
-  final void Function(
-    int bellId,
-    double intensity, {
-    StageStrikeRegion region,
-  })
+  final void Function(int bellId, double intensity, {StageStrikeRegion region})
   onBellTapped;
 
   const StageBianzhongView({
@@ -778,17 +873,18 @@ class _StageBianzhongViewState extends State<StageBianzhongView>
   @override
   void initState() {
     super.initState();
-    _strikeController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 180),
-    )..addListener(() {
-        final t = _strikeController.value;
-        setState(() {
-          _hammerStrikeY = t < 0.3
-              ? -8.0 * (t / 0.3)
-              : -8.0 * (1.0 - (t - 0.3) / 0.7);
+    _strikeController =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 180),
+        )..addListener(() {
+          final t = _strikeController.value;
+          setState(() {
+            _hammerStrikeY = t < 0.3
+                ? -8.0 * (t / 0.3)
+                : -8.0 * (1.0 - (t - 0.3) / 0.7);
+          });
         });
-      });
   }
 
   @override
@@ -874,9 +970,7 @@ class _StageBianzhongViewState extends State<StageBianzhongView>
                 event.localPosition.dy / size.height,
               );
               _lastTrailPos = pos;
-              _mouseTrail.addPoint(
-                pos, DateTime.now(), true,
-              );
+              _mouseTrail.addPoint(pos, DateTime.now(), true);
             },
             onPointerMove: (event) {
               _handlePointerMove(size, event);
@@ -889,9 +983,7 @@ class _StageBianzhongViewState extends State<StageBianzhongView>
                 final dx = pos.dx - _lastTrailPos!.dx;
                 final dy = pos.dy - _lastTrailPos!.dy;
                 if (dx * dx + dy * dy > 0.0004) {
-                  _mouseTrail.addPoint(
-                    pos, DateTime.now(), true,
-                  );
+                  _mouseTrail.addPoint(pos, DateTime.now(), true);
                   _lastTrailPos = pos;
                   if (widget.ninjaMode && _mouseTrail.points.length > 1) {
                     _processMouseTrailHits();
@@ -912,22 +1004,28 @@ class _StageBianzhongViewState extends State<StageBianzhongView>
               _mouseTrailHitTimes.clear();
             },
             child: DecoratedBox(
-              decoration: const BoxDecoration(
-                color: Color(0xfff2ecd9),
-              ),
+              decoration: const BoxDecoration(color: Color(0xfff2ecd9)),
               child: Stack(
                 children: [
-                  for (final bell in StageBianzhongView._bells)
-                    _buildBell(
-                      size: size,
-                      bell: bell,
-                      highlightedRegionsByBellId: highlightedRegionsByBellId,
-                    ),
-                  const Positioned.fill(
-                    child: IgnorePointer(
-                      child: CustomPaint(painter: _BianzhongRackPainter()),
+                  // 钟体 + 横梁（静态层）
+                  RepaintBoundary(
+                    child: Stack(
+                      children: [
+                        for (final bell in StageBianzhongView._bells)
+                          _buildBell(
+                            size: size,
+                            bell: bell,
+                            highlightedRegionsByBellId: highlightedRegionsByBellId,
+                          ),
+                        const Positioned.fill(
+                          child: IgnorePointer(
+                            child: CustomPaint(painter: _BianzhongRackPainter()),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
+                  // 光标 + 残影（动态层，每帧刷新）
                   for (final hammer in widget.activeHammers)
                     _buildHammer(
                       size: size,
@@ -984,10 +1082,12 @@ class _StageBianzhongViewState extends State<StageBianzhongView>
     final width = size.width * _stageBellWidthRatio * scale;
     final height = size.height * _stageBellHeightRatio * scale;
     final centerX = bell.x * size.width;
-    final top = size.height *
+    final top =
+        size.height *
         (bell.isUpper ? _stageUpperRowTopRatio : _stageLowerRowTopRatio);
     final isActive =
-        widget.activeBellIds.contains(bellId) || bellId == widget.lastStrikeBellId;
+        widget.activeBellIds.contains(bellId) ||
+        bellId == widget.lastStrikeBellId;
     final isFollowCurrent = widget.followAlongCurrentBellId == bellId;
     final highlightedRegions =
         highlightedRegionsByBellId[bellId] ?? const <StageStrikeRegion>{};
@@ -1004,15 +1104,47 @@ class _StageBianzhongViewState extends State<StageBianzhongView>
             SizedBox(
               width: width,
               height: height * 0.92,
-              child: CustomPaint(
-                painter: _BianzhongBellPainter(
-                  isActive: isActive,
-                  highlightedRegions: highlightedRegions,
-                  isFollowCurrent: isFollowCurrent,
-                  notePulse: isFollowCurrent ? widget.followAlongNotePulse : 0,
-                  flashActive: _flashBellIds.contains(bellId),
-                ),
-                size: Size(width, height * 0.92),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Image.asset(
+                    'assets/images/bell_reference.png',
+                    fit: BoxFit.contain,
+                    filterQuality: FilterQuality.high,
+                    gaplessPlayback: true,
+                    color: _flashBellIds.contains(bellId)
+                        ? const Color(0x66ffffff)
+                        : isFollowCurrent
+                        ? const Color(0x36ffe08a)
+                        : isActive
+                        ? const Color(0x24ffc765)
+                        : null,
+                    colorBlendMode: BlendMode.screen,
+                    errorBuilder: (context, error, stackTrace) => CustomPaint(
+                      painter: _BianzhongBellPainter(
+                        isActive: isActive,
+                        highlightedRegions: highlightedRegions,
+                        isFollowCurrent: isFollowCurrent,
+                        notePulse: isFollowCurrent
+                            ? widget.followAlongNotePulse
+                            : 0,
+                        flashActive: _flashBellIds.contains(bellId),
+                      ),
+                    ),
+                  ),
+                  CustomPaint(
+                    painter: _BianzhongBellPainter(
+                      isActive: isActive,
+                      highlightedRegions: highlightedRegions,
+                      isFollowCurrent: isFollowCurrent,
+                      notePulse: isFollowCurrent
+                          ? widget.followAlongNotePulse
+                          : 0,
+                      flashActive: _flashBellIds.contains(bellId),
+                      drawBody: false,
+                    ),
+                  ),
+                ],
               ),
             ),
             Text(
@@ -1155,7 +1287,8 @@ class _StageBianzhongViewState extends State<StageBianzhongView>
       final scale = upperScale * bell.visualScale;
       final width = size.width * _stageBellWidthRatio * scale;
       final height = size.height * _stageBellHeightRatio * scale;
-      final bellTop = size.height *
+      final bellTop =
+          size.height *
           (bell.isUpper ? _stageUpperRowTopRatio : _stageLowerRowTopRatio);
       final bellLeft = bell.x * size.width - width / 2;
       final paintHeight = height * _stageBellPaintHeightFactor;
@@ -1165,7 +1298,9 @@ class _StageBianzhongViewState extends State<StageBianzhongView>
         width * _stageBellShellWidthFactor,
         paintHeight * _stageBellShellHeightFactor,
       );
-      final strikeLayout = StageHitMapper.resolveStrikeLayoutForShellRect(shellRect);
+      final strikeLayout = StageHitMapper.resolveStrikeLayoutForShellRect(
+        shellRect,
+      );
 
       void consider({
         required Path path,
@@ -1218,7 +1353,8 @@ class _StageBianzhongViewState extends State<StageBianzhongView>
     for (final hit in trailHits) {
       final key = '${hit.bellId}:${hit.region.index}';
       final lastTime = _mouseTrailHitTimes[key];
-      if (lastTime != null && now.difference(lastTime) < const Duration(milliseconds: 300)) {
+      if (lastTime != null &&
+          now.difference(lastTime) < const Duration(milliseconds: 300)) {
         continue;
       }
       _mouseTrailHitTimes[key] = now;
@@ -1310,8 +1446,14 @@ class _BladeTrailPainter extends CustomPainter {
       if (segments.isEmpty) continue;
 
       for (final seg in segments) {
-        final start = Offset(seg.start.dx * canvasSize.width, seg.start.dy * canvasSize.height);
-        final end = Offset(seg.end.dx * canvasSize.width, seg.end.dy * canvasSize.height);
+        final start = Offset(
+          seg.start.dx * canvasSize.width,
+          seg.start.dy * canvasSize.height,
+        );
+        final end = Offset(
+          seg.end.dx * canvasSize.width,
+          seg.end.dy * canvasSize.height,
+        );
 
         if (seg.isSlashing) {
           final glowPaint = Paint()

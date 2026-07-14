@@ -2,6 +2,9 @@
 cmake_minimum_required(VERSION 3.14)
 project(bianzhong_app LANGUAGES CXX)
 
+# 静态链接 VC++ 运行库，无需额外安装 vcruntime/msvcp DLL
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
 set(BINARY_NAME "bianzhong_app")

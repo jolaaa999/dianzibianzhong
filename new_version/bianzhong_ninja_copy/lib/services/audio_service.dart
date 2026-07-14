@@ -32,33 +32,17 @@ class AudioService {
     );
   }
 
-  /// 播放编钟音效
-  Future<void> playBell(int bellId, double intensity) async {
-    if (!_isEnabled || bellId < 1 || bellId > AppConstants.bellCount) {
-      return;
-    }
+  /// 播放编钟音效（极简路径，不调音量避免阻塞）
+  void playBell(int bellId, double intensity) {
+    if (!_isEnabled || bellId < 1 || bellId > AppConstants.bellCount) return;
+    if (_players.isEmpty) return;
 
-    try {
-      if (_players.isEmpty) return;
-      final player = _players[_nextPlayerIndex % _players.length];
-      _nextPlayerIndex = (_nextPlayerIndex + 1) % _players.length;
+    final player = _players[_nextPlayerIndex % _players.length];
+    _nextPlayerIndex = (_nextPlayerIndex + 1) % _players.length;
 
-      // 根据音符播放音频文件
-      final bell = BellMapping.getBellById(bellId);
-      final adjustedVolume = _volume * intensity;
-      final assetFileName = BellMapping.resolveAssetFileName(bell);
-
-      developer.log(
-        '播放编钟 $bellId (${bell.label}) - 强度: ${intensity.toStringAsFixed(2)}',
-        name: 'AudioService',
-      );
-
-      // 播放真实的编钟音频文件
-      await player.setVolume(adjustedVolume);
-      await player.play(AssetSource('audio/$assetFileName'));
-    } catch (e) {
-      developer.log('播放音效失败: $e', name: 'AudioService', error: e);
-    }
+    final assetFileName = BellMapping.resolveAssetFileName(
+        BellMapping.getBellById(bellId));
+    player.play(AssetSource('audio/$assetFileName'));
   }
 
   /// 设置音量

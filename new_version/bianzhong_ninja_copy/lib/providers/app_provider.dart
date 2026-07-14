@@ -363,6 +363,8 @@ class AppProvider with ChangeNotifier {
   AppProvider() {
     _initializeBellStates();
     _setupListeners();
+    final initTiltRange = 60.0 - (_sensitivity * 40.0);
+    _hammerPoseMapper.setTiltRange(initTiltRange);
     startHardwareDiscovery();
     // 启动时自动加载当前 WiFi 信息，供配网界面使用
     loadCurrentWifiSsid();
@@ -402,8 +404,15 @@ class AppProvider with ChangeNotifier {
           (deviceId, _) => !activeDeviceIds.contains(deviceId),
         );
         _hammerPoseMapper.retainOnly(activeDeviceIds);
-        // 两个锤子 BNO085 安装方向相同，统一使用默认配置
-        // 如需单独调整某个锤子：setDeviceConfig(deviceId, HammerDeviceConfig(signX: ..., signY: ...))
+        // 右手锤子上下反转
+        for (final hammer in hammers) {
+          if (hammer.hand == HammerHand.right) {
+            _hammerPoseMapper.setDeviceConfig(
+              hammer.deviceId,
+              const HammerDeviceConfig(signX: 1.0, signY: -1.0),
+            );
+          }
+        }
         _requestStageRefresh(immediate: true);
         _refreshConnectionState();
         _notifySafely();
@@ -731,7 +740,7 @@ class AppProvider with ChangeNotifier {
     Offset snappedPoint = strikePoint;
     StageStrikeRegion? snapRegion;
     if (_ninjaMode) {
-      const double snapRadius = 0.11;
+      const double snapRadius = 0.07;
       const double snapStrength = 0.50;
       const double autoStrikeDist = 0.08;
       double bestRegionDist = double.infinity;
@@ -1185,6 +1194,9 @@ class AppProvider with ChangeNotifier {
 
   void setSensitivity(double sensitivity) {
     _sensitivity = sensitivity.clamp(0.0, 1.0);
+    // 灵敏度也影响光标移动速度：0.0=最慢(60°满屏), 1.0=最快(20°满屏)
+    final tiltRange = 60.0 - (_sensitivity * 40.0);
+    _hammerPoseMapper.setTiltRange(tiltRange);
     _notifySafely();
   }
 
@@ -1266,6 +1278,11 @@ class AppProvider with ChangeNotifier {
 
   void _bumpStageRevision(DateTime timestamp) {
     if (_isDisposed) return;
+    // 节流：跳过同一帧内的重复刷新
+    if (_lastStageRefreshAt != null &&
+        timestamp.difference(_lastStageRefreshAt!) < const Duration(milliseconds: 14)) {
+      return;
+    }
     _lastStageRefreshAt = timestamp;
     _stageRevision.value++;
   }

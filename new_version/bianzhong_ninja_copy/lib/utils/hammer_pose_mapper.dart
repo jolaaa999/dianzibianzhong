@@ -28,13 +28,13 @@ class HammerDeviceConfig {
 /// 敲击：Z 轴加速度超阈值
 class HammerPoseMapper {
   // 倾斜范围（度）
-  static const double _tiltRangeX = 25.0;
-  static const double _slowAlpha = 0.65;
-  static const double _fastAlpha = 0.94;
+  double _tiltRangeX = 35.0;
+  static const double _slowAlpha = 0.62;
+  static const double _fastAlpha = 0.90;
   static const double _stillAngVel = 12.0;
   static const double _fastAngVel = 260.0;
-  static const double _stillDead = 0.10;
-  static const double _slowDead = 0.04;
+  static const double _stillDead = 0.14;
+  static const double _slowDead = 0.06;
   static const double _fastDead = 0.015;
   static const double _maxDeltaDeg = 90.0;
   // 敲击
@@ -57,6 +57,7 @@ class HammerPoseMapper {
 
   void setDefaultConfig(HammerDeviceConfig c) => _defaultConfig = c;
   void setDeviceConfig(String id, HammerDeviceConfig c) => _deviceConfigs[id] = c;
+  void setTiltRange(double range) => _tiltRangeX = range.clamp(15.0, 80.0);
 
   HammerPoseProjection update({
     required String deviceId,
@@ -108,6 +109,12 @@ class HammerPoseMapper {
     var deltaY = (zAxisWorldY - (state.prevElevation ?? zAxisWorldY)) * 180.0;
     if (deltaX.abs() < dead) deltaX = 0;
     if (deltaY.abs() < dead) deltaY = 0;
+    // 主轴锁定：主方向运动时副轴抖动衰减到 20%
+    if (deltaX.abs() > deltaY.abs() * 1.5) {
+      deltaY *= 0.2;
+    } else if (deltaY.abs() > deltaX.abs() * 1.5) {
+      deltaX *= 0.2;
+    }
     deltaX = deltaX.clamp(-_maxDeltaDeg, _maxDeltaDeg);
     deltaY = deltaY.clamp(-_maxDeltaDeg, _maxDeltaDeg);
     // NaN 保护：快速挥动时四元数可能产生无效值
